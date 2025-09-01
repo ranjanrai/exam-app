@@ -670,18 +670,7 @@ function importFullBackup(file) {
       users = backup.users || [];
       questions = backup.questions || [];
       results = backup.results || [];
-      settings = {
-  durationMin: backup.settings?.durationMin || 30,
-  customMsg: backup.settings?.customMsg || "📢 Welcome to your exam! Stay calm, focus, and do your best, Made by Ranjan Kumar 🚀",
-  shuffle: backup.settings?.shuffle || false,
-  counts: {
-    Synopsis: backup.settings?.counts?.Synopsis || 0,
-    "Minor Practical": backup.settings?.counts?.["Minor Practical"] || 0,
-    "Major Practical": backup.settings?.counts?.["Major Practical"] || 0,
-    Viva: backup.settings?.counts?.Viva || 0
-  }
-};
-
+      settings = backup.settings || settings;
       adminCred = backup.adminCred || MASTER_ADMIN;
 
       write(K_USERS, users);
@@ -690,13 +679,16 @@ function importFullBackup(file) {
       write(K_SETTINGS, settings);
       write(K_ADMIN, adminCred);
 
-      alert("✅ Full backup restored!");
-      renderUsersAdmin();
+      // ✅ Show success
+      showImportMessage("✅ Backup JSON imported successfully!");
+
+      // ✅ Refresh UI so changes appear
       renderQuestionsList();
+      renderUsersAdmin();
       renderResults();
+
     } catch (err) {
-      alert("❌ Invalid backup file");
-      console.error(err);
+      alert("❌ Invalid JSON file: " + err.message);
     }
   };
   reader.readAsText(file);
@@ -1704,3 +1696,4 @@ window.addEventListener("DOMContentLoaded", () => {
 </script>
 </body>
 </html>
+
