@@ -1,0 +1,70 @@
+{
+  "users": [],
+  "questions": [
+    {
+      "id": "i9wfj0q",
+      "question": "HTML stands for?",
+      "options": [
+        "Hyperlinks Text Markup",
+        "Home Tool Markup",
+        "Hyper Text Markup Language",
+        "Hyperlinking Text Markdown"
+      ],
+      "answer": 2,
+      "marks": 1,
+      "category": "Synopsis"
+    },
+    {
+      "id": "vtmw378",
+      "question": "Which tag defines paragraph?",
+      "options": [
+        "<p>",
+        "<para>",
+        "<pg>",
+        "<par>"
+      ],
+      "answer": 0,
+      "marks": 1,
+      "category": "Minor Practical"
+    },
+    {
+      "id": "z7qlt67",
+      "question": "Which method adds to array end?",
+      "options": [
+        "push",
+        "pop",
+        "shift",
+        "unshift"
+      ],
+      "answer": 0,
+      "marks": 2,
+      "category": "Major Practical"
+    },
+    {
+      "id": "ks49usx",
+      "question": "Does localStorage persist after browser restart?",
+      "options": [
+        "Yes",
+        "No",
+        "Sometimes",
+        "Depends"
+      ],
+      "answer": 0,
+      "marks": 1,
+      "category": "Viva"
+    }
+  ],
+  "results": [],
+  "settings": {
+    "durationMin": 30,
+    "customMsg": "📢 Welcome to your exam! Stay calm, focus, and do your best, Made by Ranjan Kumar 🚀",
+    "shuffle": false,
+    "counts": {
+      "Synopsis": 2,
+      "Minor Practical": 2,
+      "Major Practical": 1,
+      "Viva": 2
+    }
+  },
+  "adminCred": null
+}
