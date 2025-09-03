@@ -1027,42 +1027,42 @@ if(i === EXAM.cur) {
   });
 }
 
-function submitExam(auto=false){
-  if(!auto && !confirm('Submit exam now?')) return;
+async function submitExam(auto=false) {
+  if (!auto && !confirm('Submit exam now?')) return;
   stopTimer();
   const paper = EXAM.paper;
   let totalMarks = 0, earned = 0;
-  const sectionScores = { 'Synopsis':0, 'Minor Practical':0, 'Major Practical':0, 'Viva':0 };
+  const sectionScores = { 'Synopsis': 0, 'Minor Practical': 0, 'Major Practical': 0, 'Viva': 0 };
 
-paper.forEach(q => { 
-  totalMarks += (q.marks || 1); 
-  const chosen = EXAM.state.answers[q.id]; 
+  paper.forEach(q => {
+    totalMarks += (q.marks || 1);
+    const chosen = EXAM.state.answers[q.id];
 
-  if(q.category === "Major Practical") {
-    if(chosen === 0) { // A → full marks
-      earned += q.marks;
-      sectionScores[q.category] += q.marks;
-    } 
-    else if(chosen === 1) { // B → 75%
-      const val = Math.round(q.marks * 0.75);
-      earned += val;
-      sectionScores[q.category] += val;
+    if (q.category === "Major Practical") {
+      if (chosen === 0) { // A → full marks
+        earned += q.marks;
+        sectionScores[q.category] += q.marks;
+      }
+      else if (chosen === 1) { // B → 75%
+        const val = Math.round(q.marks * 0.75);
+        earned += val;
+        sectionScores[q.category] += val;
+      }
+      else if (chosen === 2) { // C → 50%
+        const val = Math.round(q.marks * 0.5);
+        earned += val;
+        sectionScores[q.category] += val;
+      }
+      else {
+        // D → 0 marks
+      }
+    } else {
+      if (chosen === q.answer) {
+        earned += (q.marks || 1);
+        sectionScores[q.category] = (sectionScores[q.category] || 0) + (q.marks || 1);
+      }
     }
-    else if(chosen === 2) { // C → 50%
-      const val = Math.round(q.marks * 0.5);
-      earned += val;
-      sectionScores[q.category] += val;
-    }
-    else { // D → 0
-      // no marks
-    }
-  } else {
-    if(chosen === q.answer) {   // ✅ only add if correct
-      earned += (q.marks || 1); 
-      sectionScores[q.category] = (sectionScores[q.category] || 0) + (q.marks || 1); 
-    }
-  }
-});
+  });
 
   // round marks before calculating percentage
   earned = Math.round(earned);
@@ -1070,43 +1070,36 @@ paper.forEach(q => {
 
   const percent = Math.round((earned / Math.max(1, totalMarks)) * 100);
 
-(async () => {
-  const record = { 
-    username: EXAM.state.username, 
-    totalScorePercent: percent, 
-    sectionScores, 
-    timestamp: Date.now() 
-  };
-  // 🔹 Save to Firebase (in parallel with localStorage)
-  saveToFirestore("results", uid(), record);
+  // 🔹 Save results
+  (async () => {
+    const record = {
+      username: EXAM.state.username,
+      totalScorePercent: percent,
+      sectionScores,
+      timestamp: Date.now()
+    };
 
-  // Load the latest results from storage (decrypt first if exists)
-  let current = [];
-  const stored = read(K_RESULTS, null);
-  if (stored) {
+    // 1️⃣ Merge into in-memory results
+    results.push(record);
+
+    // 2️⃣ Encrypt and save locally
+    const encryptedResults = await encryptData(results);
+    write(K_RESULTS, encryptedResults);
+
+    // 3️⃣ Save the full encrypted array to Firestore
     try {
-      current = await decryptData(stored);
-    } catch (e) {
-      console.warn("Failed to decrypt existing results, starting fresh", e);
-      current = [];
+      await setDoc(doc(db, "results", "all"), { data: encryptedResults });
+      console.log("✅ Results synced to Firestore (encrypted)");
+    } catch (err) {
+      console.error("❌ Firestore save error (results):", err);
     }
-  }
 
-  current.push(record);
+    // 4️⃣ Auto-download encrypted JSON as backup
+    const filename = `results_${EXAM.state.username}_${Date.now()}.json`;
+    download(filename, JSON.stringify(encryptedResults, null, 2), 'application/json');
+  })();
 
-  // 🔒 Encrypt before saving
-  const encryptedResults = await encryptData(current);
-  write(K_RESULTS, encryptedResults);
-
-  // ✅ also update the global variable (keep it in sync)
-  results = current;
-
-  // Auto-download encrypted JSON
-  const filename = `results_${EXAM.state.username}_${Date.now()}.json`;
-  download(filename, JSON.stringify(encryptedResults, null, 2), 'application/json');
-})();
-
-  // show score
+  // 🔹 Show score & redirect
   $('#fsQuestion').innerHTML = `
     <div style="text-align:center;font-size:22px;font-weight:900">
       Your Score: ${percent}%
@@ -1122,9 +1115,9 @@ paper.forEach(q => {
 
   let secs = 5;
   const msgEl = document.getElementById('redirectMsg');
-  const countdown = setInterval(()=>{
+  const countdown = setInterval(() => {
     secs--;
-    if(secs > 0){
+    if (secs > 0) {
       msgEl.textContent = `Redirecting in ${secs}s...`;
     } else {
       clearInterval(countdown);
@@ -1133,7 +1126,6 @@ paper.forEach(q => {
     }
   }, 1000);
 }
-
 
 /* Close fullscreen and return to main page (reload to refresh admin view) */
 function closeFullscreen(){ stopTimer(); $('#examFullscreen').style.display = 'none'; location.reload(); }
@@ -1560,8 +1552,20 @@ function exportResultsJSON(){
   download('results.json', JSON.stringify(results, null, 2), 'application/json');
 }
 
-function triggerImportResults(){ 
-  document.getElementById('impResultsFile').click(); 
+function exportResultsCSV(){
+  if(results.length === 0) return alert('No results to export');
+  const rows = [['username','totalPercent','synopsis','minor','major','viva','timestamp']];
+  results.forEach(r => rows.push([
+    r.username,
+    r.totalScorePercent,
+    r.sectionScores['Synopsis']||0,
+    r.sectionScores['Minor Practical']||0,
+    r.sectionScores['Major Practical']||0,
+    r.sectionScores['Viva']||0,
+    new Date(r.timestamp).toISOString()
+  ]));
+  const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+  download('results.csv', csv, 'text/csv');
 }
 
 async function importResultsFile(e) {
@@ -1926,17 +1930,43 @@ async function loadQuestionsFromFirestore() {
 
 async function loadResultsFromFirestore() {
   try {
-    const arr = [];
-    const snap = await getDocs(collection(db, "results"));
-    snap.forEach(docSnap => arr.push(docSnap.data()));
-    if (arr.length > 0) {
-      results = arr;
-      write(K_RESULTS, results);
-      console.log("✅ Loaded results from Firestore:", results);
+    const snap = await getDoc(doc(db, "results", "all"));
+    if (snap.exists()) {
+      const encryptedObj = snap.data().data;
+
+      try {
+        results = await decryptData(encryptedObj);   // plain array in memory
+        write(K_RESULTS, encryptedObj);              // keep encrypted offline copy
+        console.log("✅ Loaded results from Firestore:", results);
+      } catch (e) {
+        console.error("❌ Failed to decrypt Firestore results:", e);
+        results = [];
+      }
+    } else {
+      console.warn("⚠️ No results found in Firestore, checking local backup...");
+      const stored = read(K_RESULTS, null);
+      if (stored) {
+        try {
+          results = await decryptData(stored);
+        } catch {
+          results = [];
+        }
+      } else {
+        results = [];
+      }
     }
   } catch (err) {
     console.error("❌ Firestore load error (results):", err);
-    results = read(K_RESULTS, []);
+    const stored = read(K_RESULTS, null);
+    if (stored) {
+      try {
+        results = await decryptData(stored);
+      } catch {
+        results = [];
+      }
+    } else {
+      results = [];
+    }
   }
 }
 
@@ -1944,7 +1974,8 @@ async function initApp() {
   await loadSettingsFromFirestore();
   await loadQuestionsFromFirestore();
   await loadUsersFromFirestore();
-  await loadResultsFromFirestore();
+  await loadResultsFromFirestore();  // if you want Firebase sync
+  await loadResultsFromStorage();    // 🔑 ensure decrypted
 
   renderSettingsAdmin();
   renderExamHeader();
@@ -1952,7 +1983,6 @@ async function initApp() {
   renderUsersAdmin();
   renderResults();
 }
-
 
 </script>
 </body>
