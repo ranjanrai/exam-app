@@ -1875,8 +1875,7 @@ function showImportMessage(msg) {
 // Run on startup
 window.addEventListener("DOMContentLoaded", () => {
   initApp();
-});
-
+})
 
 async function loadSettingsFromFirestore() {
   try {
@@ -1909,17 +1908,54 @@ async function loadQuestionsFromFirestore() {
     questions = read(K_QS, []);
   }
 }
+  async function loadUsersFromFirestore() {
+  try {
+    const arr = [];
+    const snap = await getDocs(collection(db, "users"));
+    snap.forEach(docSnap => arr.push(docSnap.data()));
+    if (arr.length > 0) {
+      users = arr;
+      write(K_USERS, users);
+      console.log("✅ Loaded users from Firestore:", users);
+    }
+  } catch (err) {
+    console.error("❌ Firestore load error (users):", err);
+    users = read(K_USERS, []);
+  }
+}
+
+async function loadResultsFromFirestore() {
+  try {
+    const arr = [];
+    const snap = await getDocs(collection(db, "results"));
+    snap.forEach(docSnap => arr.push(docSnap.data()));
+    if (arr.length > 0) {
+      results = arr;
+      write(K_RESULTS, results);
+      console.log("✅ Loaded results from Firestore:", results);
+    }
+  } catch (err) {
+    console.error("❌ Firestore load error (results):", err);
+    results = read(K_RESULTS, []);
+  }
+}
+
 async function initApp() {
   await loadSettingsFromFirestore();
   await loadQuestionsFromFirestore();
-  // 🔹 you can add loadUsersFromFirestore() and loadResultsFromFirestore() later
+  await loadUsersFromFirestore();
+  await loadResultsFromFirestore();
+
   renderSettingsAdmin();
   renderExamHeader();
   renderQuestionsList();
   renderUsersAdmin();
+  renderResults();
 }
+
 
 </script>
 </body>
 </html>
+
 
