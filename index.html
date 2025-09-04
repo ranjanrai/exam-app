@@ -7,6 +7,7 @@
   import { getFirestore, collection, doc, setDoc, getDocs, getDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
   import { getStorage } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
 
+  
   const firebaseConfig = {
     apiKey: "AIzaSyC7X0B65qfWiSkSaC_-dXElw687ZmVM9gU",
     authDomain: "exam-system-2ed90.firebaseapp.com",
@@ -1594,7 +1595,7 @@ function renderExamHeader() {
     html += `<img src="${settings.logo}" alt="Logo" style="max-height:80px; margin-bottom:8px;">`;
   }
 
-  html += `<div>Offline MCQ Examination</div>`;
+  html += `<div>Online MCQ Examination System</div>`;
 
   if (settings.author) html += `<div>Made by: ${escapeHTML(settings.author)}</div>`;
   if (settings.college) html += `<div>${escapeHTML(settings.college)}</div>`;
@@ -2190,6 +2191,7 @@ async function initApp() {
 </script>
 </body>
 </html>
+
 
 
 
