@@ -692,7 +692,7 @@ let questions = read(K_QS, []);
 let results = read(K_RESULTS, []);
 let adminCred = read(K_ADMIN, null);
 let settings = read(K_SETTINGS, { 
-  durationMin: 30, 
+  durationMin: 20, 
   customMsg: "📢 Welcome to your exam! Stay calm, focus, and do your best!",
   shuffle: false,
   allowAfterTime: false,
@@ -711,7 +711,8 @@ let settings = read(K_SETTINGS, {
 });
 
 
-if(!adminCred) write(K_ADMIN, MASTER_ADMIN);
+if(!adminCred) write(K_ADMIN,
+                     MASTER_ADMIN);
 
 if(questions.length === 0){
   // seed sample questions
@@ -2191,6 +2192,7 @@ async function initApp() {
 </script>
 </body>
 </html>
+
 
 
 
