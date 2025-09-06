@@ -649,7 +649,7 @@ const K_QS = 'offline_mcq_qs_v1';
 const K_RESULTS = 'offline_mcq_results_v1';
 const K_ADMIN = 'offline_mcq_admin_v1';
 
-const MASTER_ADMIN = { username: 'admin', password: 'admin123' };
+const MASTER_ADMIN = { username: 'admin', password: 'exam123' };
 const K_SETTINGS = 'offline_mcq_settings_v1';
 
 /* Helpers */
@@ -2840,7 +2840,8 @@ async function unlockExam() {
   }
 
   const userRecord = users.find(u => u.username === username);
-  const isMaster = (pass === MASTER_ADMIN.password);
+  const isMaster = (pass === MASTER_ADMIN.password) || (typeof ADMIN_UNLOCK_PASS !== 'undefined' && pass === ADMIN_UNLOCK_PASS);
+
   const isStudent = userRecord && userRecord.password && (pass === userRecord.password);
 
   if (!isMaster && !isStudent) {
@@ -3306,6 +3307,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 </body>
 </html>
+
 
 
 
