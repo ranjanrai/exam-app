@@ -2572,46 +2572,6 @@ function pauseExam() {
       .catch(e => console.warn("Failed to save locked state:", e));
   }
 }
-let PAUSED_SESSION_POLL_ID = null;
-
-function startPausedSessionPolling() {
-  stopPausedSessionPolling();
-  if (!EXAM.state || !EXAM.state.username) return;
-  PAUSED_SESSION_POLL_ID = setInterval(async () => {
-    try {
-      const snap = await getDoc(doc(db, "sessions", EXAM.state.username));
-      if (!snap.exists()) return;
-      const s = snap.data();
-      if (!s.locked) {
-        // admin cleared the lock
-        stopPausedSessionPolling();
-        // hide lock screen and resume
-        document.getElementById("lockScreen").style.display = "none";
-        enterFullscreen(document.documentElement);
-        startTimer();
-        examPaused = false;
-        // update local saved state and resume periodic session saves
-        EXAM.state.locked = false;
-        saveSessionToFirestore(EXAM.state.username, EXAM.state, EXAM.paper);
-        startPeriodicSessionSave();
-        alert("Unlocked by admin — resuming exam.");
-      }
-    } catch (e) {
-      console.warn("paused poll error:", e);
-    }
-  }, 2500); // every 2.5s
-}
-
-function stopPausedSessionPolling() {
-  if (PAUSED_SESSION_POLL_ID) { clearInterval(PAUSED_SESSION_POLL_ID); PAUSED_SESSION_POLL_ID = null; }
-}
-
-// Start polling when we pause
-// modify pauseExam() to call:
-startPausedSessionPolling();
-
-// And make sure stopPausedSessionPolling() is called when user unlocks locally (in unlockExam)
-
 
 // 🔹 Unlock Exam with Password
 function unlockExam() {
@@ -2944,6 +2904,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 </body>
 </html>
+
 
 
 
