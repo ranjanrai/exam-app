@@ -4,7 +4,7 @@
 <!-- Firebase SDK -->
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-  import { getFirestore, collection, doc, setDoc, getDocs, getDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+  import { getFirestore, collection, doc, setDoc, getDocs, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
   import { getStorage } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
 
   
@@ -1509,6 +1509,10 @@ async function unlockExamForUser() {
   if (window.IS_ADMIN && typeof renderSessionsAdmin === 'function') {
     try { renderSessionsAdmin(); } catch (e) { console.warn(e); }
   }
+
+  // ✅ Stop watchers/pollers once user is unlocked locally
+  stopSessionWatcher();
+  if (typeof stopPausedSessionPolling === 'function') stopPausedSessionPolling();
 }
 
 // expose globally so inline onclicks can call them
@@ -1536,6 +1540,55 @@ document.addEventListener('visibilitychange', async () => {
     console.warn('visibilitychange handler error', e);
   }
 });
+// ---------- Realtime session watcher (more reliable than polling) ----------
+let SESSION_UNSUBSCRIBE = null;
+
+function startSessionWatcher(username) {
+  try {
+    // stop existing if any
+    if (SESSION_UNSUBSCRIBE) { SESSION_UNSUBSCRIBE(); SESSION_UNSUBSCRIBE = null; }
+
+    if (!username) return;
+    const ref = doc(db, "sessions", username);
+    // onSnapshot will call immediately with current value, and then whenever doc changes
+    SESSION_UNSUBSCRIBE = onSnapshot(ref, snap => {
+      try {
+        if (!snap.exists()) return;
+        const s = snap.data();
+        console.log("session watcher:", username, s);
+        // If admin cleared lock -> resume
+        if (!s.locked) {
+          // clear any poller too (backwards compat)
+          if (typeof stopPausedSessionPolling === 'function') stopPausedSessionPolling();
+
+          // Resume UI & timer exactly like your existing poll-resume logic
+          try { document.getElementById("lockScreen").style.display = 'none'; } catch(e){}
+          try { enterFullscreen(document.documentElement); } catch(e){}
+          try { startTimer(); } catch(e){}
+          examPaused = false;
+          if (EXAM && EXAM.state) EXAM.state.locked = false;
+          try { saveSessionToFirestore(EXAM.state.username, EXAM.state, EXAM.paper); } catch(e){}
+          try { startPeriodicSessionSave(); } catch(e){}
+          // stop watching until next pause
+          if (SESSION_UNSUBSCRIBE) { SESSION_UNSUBSCRIBE(); SESSION_UNSUBSCRIBE = null; }
+          alert("✅ Unlocked by admin — resuming exam.");
+        }
+      } catch (err) {
+        console.warn("session watcher callback error", err);
+      }
+    }, err => {
+      console.warn("session watcher error", err);
+    });
+  } catch (err) {
+    console.warn("startSessionWatcher failed", err);
+  }
+}
+
+function stopSessionWatcher() {
+  try {
+    if (SESSION_UNSUBSCRIBE) { SESSION_UNSUBSCRIBE(); SESSION_UNSUBSCRIBE = null; }
+  } catch (e) { /* ignore */ }
+}
 
 function stopTimer(){ if(EXAM.timerId){ clearInterval(EXAM.timerId); EXAM.timerId = null; } }
 function updateTimerText(){ const ms = Math.max(0, EXAM.state.remainingMs); $('#fsTimer').textContent = msToTime(ms); }
@@ -2656,7 +2709,7 @@ function pauseExam() {
   }
 
   // START the paused-session poller so admin clear will be detected
-  startPausedSessionPolling();
+  startSessionWatcher(EXAM.state.username);
 }
 
 
@@ -2678,12 +2731,15 @@ async function unlockExam() {
       if (!s.locked) {
         // Admin already unlocked -> resume locally
         if (typeof stopPausedSessionPolling === 'function') stopPausedSessionPolling();
+        if (typeof stopSessionWatcher === 'function') stopSessionWatcher();
+
         document.getElementById("lockScreen").style.display = "none";
         try { enterFullscreen(document.documentElement); } catch(e) {}
-        startTimer();
+        try { startTimer(); } catch(e) {}
         examPaused = false;
         EXAM.state.locked = false;
-        startPeriodicSessionSave();
+        try { startPeriodicSessionSave(); } catch(e) {}
+
         alert("✅ Unlocked by admin — resuming exam.");
         input.value = "";
         return;
@@ -2702,7 +2758,6 @@ async function unlockExam() {
   }
 
   const userRecord = users.find(u => u.username === username);
-
   const isMaster = (pass === MASTER_ADMIN.password);
   const isStudent = userRecord && userRecord.password && (pass === userRecord.password);
 
@@ -2718,15 +2773,12 @@ async function unlockExam() {
     EXAM.state.locked = false;
     EXAM.state.lockReason = "";
     // Save to sessions collection so admin sees the change
-    // Prefer using saveSessionToFirestore helper if available
     if (typeof saveSessionToFirestore === 'function') {
       await saveSessionToFirestore(username, EXAM.state, EXAM.paper);
-      // also explicitly write unlockedAt/updatedAt for clarity
       try {
         await setDoc(doc(db, "sessions", username), { locked: false, unlockedAt: Date.now(), updatedAt: Date.now() }, { merge: true });
       } catch(e){ /* non-fatal */ }
     } else {
-      // fallback direct write
       await setDoc(doc(db, "sessions", username), { locked: false, unlockedAt: Date.now(), updatedAt: Date.now() }, { merge: true });
     }
   } catch (err) {
@@ -2736,17 +2788,19 @@ async function unlockExam() {
 
   // --- 4) Restore UI & timer ---
   if (typeof stopPausedSessionPolling === 'function') stopPausedSessionPolling();
+  if (typeof stopSessionWatcher === 'function') stopSessionWatcher();
+
   document.getElementById("lockScreen").style.display = "none";
   try { enterFullscreen(document.documentElement); } catch(e) {}
-  startTimer();
+  try { startTimer(); } catch(e) {}
   examPaused = false;
-  startPeriodicSessionSave();
+  try { startPeriodicSessionSave(); } catch(e) {}
 
   alert("✅ Unlocked. Resuming exam.");
   input.value = "";
 }
 
-// expose globally if your markup uses inline onclick
+// expose if needed by inline onclick
 window.unlockExam = unlockExam;
 
 let PAUSED_SESSION_POLL_ID = null;
@@ -3167,6 +3221,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 </body>
 </html>
+
 
 
 
