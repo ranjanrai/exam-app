@@ -2567,22 +2567,62 @@ function pauseExam() {
   // Save session immediately and mark it as locked so admin can see it
   if (EXAM.state && EXAM.state.username) {
     const username = EXAM.state.username;
-    // best-effort fire-and-forget
+    // include locked: true in state so saveSessionToFirestore will persist it
     saveSessionToFirestore(username, { ...EXAM.state, locked: true }, EXAM.paper)
       .catch(e => console.warn("Failed to save locked state:", e));
   }
+
+  // START the paused-session poller so admin clear will be detected
+  startPausedSessionPolling();
 }
 
+
 // 🔹 Unlock Exam with Password
-function unlockExam() {
+async function unlockExam() {
+  // First, check server-side session doc in case admin already unlocked it
+  try {
+    if (EXAM.state && EXAM.state.username) {
+      const snap = await getDoc(doc(db, "sessions", EXAM.state.username));
+      if (snap.exists()) {
+        const s = snap.data();
+        if (!s.locked) {
+          // admin already unlocked -> resume immediately
+          stopPausedSessionPolling();
+          document.getElementById("lockScreen").style.display = "none";
+          enterFullscreen(document.documentElement);
+          startTimer();
+          examPaused = false;
+          EXAM.state.locked = false;
+          // resume periodic saves
+          startPeriodicSessionSave();
+          alert("Unlocked by admin — resuming exam.");
+          return;
+        }
+      }
+    }
+  } catch (e) {
+    console.warn("unlockExam: server check failed", e);
+    // continue to password fallback if server read failed
+  }
+
+  // Password fallback (existing behavior)
   const input = document.getElementById("unlockPassword");
   const pass = input.value.trim();
 
-  if (pass === ADMIN_UNLOCK_PASS) {   // ✅ FIXED HERE
+  if (pass === ADMIN_UNLOCK_PASS) {
+    stopPausedSessionPolling();
     document.getElementById("lockScreen").style.display = "none";
-    enterFullscreen(document.documentElement); // force fullscreen again
-    startTimer(); // resume timer
+    enterFullscreen(document.documentElement);
+    startTimer();
     examPaused = false;
+    // update server copy to reflect unlocked local action (optional)
+    if (EXAM.state && EXAM.state.username) {
+      try {
+        await setDoc(doc(db, "sessions", EXAM.state.username), { locked: false, unlockedAt: Date.now(), updatedAt: Date.now() }, { merge: true });
+      } catch (err) {
+        console.warn("unlockExam: failed to write unlocked flag to server", err);
+      }
+    }
   } else {
     alert("❌ Wrong password. Try again.");
   }
@@ -2590,6 +2630,7 @@ function unlockExam() {
   // Always clear password after attempt
   input.value = "";
 }
+
 let PAUSED_SESSION_POLL_ID = null;
 
 function startPausedSessionPolling() {
@@ -2904,6 +2945,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 </body>
 </html>
+
 
 
 
