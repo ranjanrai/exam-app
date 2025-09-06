@@ -1868,31 +1868,21 @@ function renderUsersAdmin(){
 function adminClearUsers(){ if(!confirm('Delete ALL users?')) return; users = []; write(K_USERS, users); renderUsersAdmin(); }
 
 /* Results admin */
+// Replace existing renderResults() with this improved version
 async function renderResults() {
-  const out = $('#resultsArea'); 
-  out.innerHTML = '<div class="small">Decrypting...</div>';
+  const out = $('#resultsArea');
+  out.innerHTML = '<div class="small">Loading latest results…</div>';
 
-  // Load encrypted results from storage
-  let stored = read(K_RESULTS, null);
-  if (!stored) {
-    out.innerHTML = '<div class="small">No results yet</div>';
-    return;
-  }
-
-  try {
-    // 🔓 Decrypt results before using
-    const decrypted = await decryptData(stored);
-
-    if (decrypted.length === 0) {
+  // Helper to render decrypted array to table
+  function renderTable(decrypted) {
+    if (!Array.isArray(decrypted) || decrypted.length === 0) {
       out.innerHTML = '<div class="small">No results yet</div>';
       return;
     }
-
-    const table = document.createElement('table'); 
+    const table = document.createElement('table');
     table.className = 'table';
-
-    const thead = document.createElement('thead'); 
-    thead.innerHTML = '<tr><th>User</th><th>Total %</th><th>Synopsis</th><th>Minor Practical</th><th>Major Practical</th><th>Viva</th><th>Time</th></tr>'; 
+    const thead = document.createElement('thead');
+    thead.innerHTML = '<tr><th>User</th><th>Total %</th><th>Synopsis</th><th>Minor Practical</th><th>Major Practical</th><th>Viva</th><th>Time</th></tr>';
     table.appendChild(thead);
 
     const tbody = document.createElement('tbody');
@@ -1909,16 +1899,56 @@ async function renderResults() {
       `;
       tbody.appendChild(tr);
     });
-
-    table.appendChild(tbody); 
-    out.innerHTML = ''; 
+    table.appendChild(tbody);
+    out.innerHTML = '';
     out.appendChild(table);
+  }
 
+  // 1) Try Firestore first (if initialized)
+  try {
+    const snap = await getDoc(doc(db, "results", "all"));
+    if (snap && snap.exists && snap.exists()) {
+      const enc = snap.data().data;
+      if (enc) {
+        try {
+          const decrypted = await decryptData(enc);
+          // update local storage and in-memory variable
+          const encryptedLocal = await encryptData(decrypted);
+          write(K_RESULTS, encryptedLocal);
+          results = decrypted;
+          console.log("✅ Loaded results from Firestore and updated local storage");
+          renderTable(decrypted);
+          return;
+        } catch (err) {
+          console.warn("⚠️ Could not decrypt Firestore results:", err);
+          // continue to fallback below
+        }
+      }
+    } else {
+      console.log("ℹ️ No results found in Firestore (results/all)");
+    }
+  } catch (err) {
+    console.warn("⚠️ Firestore read failed (renderResults):", err);
+    // proceed to fallback to local storage
+  }
+
+  // 2) Fallback: use local storage K_RESULTS
+  let stored = read(K_RESULTS, null);
+  if (!stored) {
+    out.innerHTML = '<div class="small">No results yet</div>';
+    return;
+  }
+  try {
+    const decrypted = await decryptData(stored);
+    results = decrypted;
+    renderTable(decrypted);
+    console.log("✅ Loaded results from local storage");
   } catch (err) {
     out.innerHTML = '<div class="small danger">⚠️ Failed to decrypt results</div>';
-    console.error(err);
+    console.error("renderResults decrypt error:", err);
   }
 }
+
 
 /* ---------------------------
    Show Live Sessions only after Admin login
@@ -2805,6 +2835,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 </body>
 </html>
+
 
 
 
