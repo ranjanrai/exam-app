@@ -1078,17 +1078,20 @@ async function saveSessionToFirestore(username, state = null, paper = null) {
   if (!username) return;
   try {
     // create lightweight snapshot: store paper IDs to reconstruct
-    const payload = {
-      remainingMs: state?.remainingMs ?? EXAM.state?.remainingMs ?? 0,
-      updatedAt: Date.now(),
-      startedAt: state?.startedAt ?? EXAM.state?.startedAt ?? Date.now(),
-      cur: state?.cur ?? EXAM.cur ?? 0,
-      paperIds: paper ? paper.map(p => p.id) : (EXAM.paper ? EXAM.paper.map(p => p.id) : []),
-      answers: state?.answers ?? EXAM.state?.answers ?? {},
-      flags: state?.flags ?? EXAM.state?.flags ?? {},
-      // incrementing resumes must be handled by incrementSessionResumeCount()
-    };
-    await setDoc(doc(db, "sessions", username), payload, { merge: true });
+    // ---- replace the payload building in saveSessionToFirestore() with this ----
+const payload = {
+  remainingMs: state?.remainingMs ?? EXAM.state?.remainingMs ?? 0,
+  updatedAt: Date.now(),
+  startedAt: state?.startedAt ?? EXAM.state?.startedAt ?? Date.now(),
+  cur: state?.cur ?? EXAM.cur ?? 0,
+  paperIds: paper ? paper.map(p => p.id) : (EXAM.paper ? EXAM.paper.map(p => p.id) : []),
+  answers: state?.answers ?? EXAM.state?.answers ?? {},
+  flags: state?.flags ?? EXAM.state?.flags ?? {},
+  // NEW: save whether the exam is paused/locked for the user
+  locked: !!(state?.locked || (typeof examPaused !== 'undefined' && examPaused))
+};
+await setDoc(doc(db, "sessions", username), payload, { merge: true });
+
     // console.log("🔁 Session saved for", username);
     return true;
   } catch (err) {
@@ -2052,10 +2055,15 @@ async function renderSessionsAdmin() {
     const actions = document.createElement('div');
     actions.style.display = 'flex';
     actions.style.gap = '8px';
-    actions.innerHTML = `
-      <button class="btn" onclick='adminViewSession("${sess.id}")'>View</button>
-      <button class="btn" onclick='adminForceClearSession("${sess.id}")'>Clear</button>
-    `;
+    // inside renderSessionsAdmin() where you build actions for each sess:
+const isLocked = !!sess.locked;
+
+actions.innerHTML = `
+  <button class="btn" onclick='adminViewSession("${sess.id}")'>View</button>
+  <button class="btn" onclick='adminForceClearSession("${sess.id}")'>Clear</button>
+  ${isLocked ? `<span class="badge" style="margin-left:8px;background:#f87171;color:white">Locked</span>` : ''}
+  ${isLocked ? `<button class="btn brand" onclick='adminUnlockSession("${sess.id}")'>Unlock</button>` : ''}
+`;
 
     wrapper.appendChild(left);
     wrapper.appendChild(mid);
@@ -2119,6 +2127,19 @@ async function clearAllSessions() {
     alert('Failed to clear sessions (see console).');
   }
 }
+  // Admin: remote-unlock a student's session (clears the locked flag)
+async function adminUnlockSession(sessionId) {
+  if (!confirm(`Unlock session for "${sessionId}"? This will allow the student to resume.`)) return;
+  try {
+    await setDoc(doc(db, "sessions", sessionId), { locked: false, unlockedAt: Date.now(), updatedAt: Date.now() }, { merge: true });
+    alert("Session unlocked.");
+    renderSessionsAdmin();
+  } catch (err) {
+    console.error(err);
+    alert("Failed to unlock session (see console).");
+  }
+}
+window.adminUnlockSession = adminUnlockSession; // expose globally for the inline onclick
 
 // Auto-refresh toggle handler: call render every 5s when checked
 document.addEventListener('DOMContentLoaded', () => {
@@ -2542,7 +2563,55 @@ function pauseExam() {
   examPaused = true;
   clearInterval(EXAM.timerId); // stop timer
   document.getElementById("lockScreen").style.display = "flex";
+
+  // Save session immediately and mark it as locked so admin can see it
+  if (EXAM.state && EXAM.state.username) {
+    const username = EXAM.state.username;
+    // best-effort fire-and-forget
+    saveSessionToFirestore(username, { ...EXAM.state, locked: true }, EXAM.paper)
+      .catch(e => console.warn("Failed to save locked state:", e));
+  }
 }
+let PAUSED_SESSION_POLL_ID = null;
+
+function startPausedSessionPolling() {
+  stopPausedSessionPolling();
+  if (!EXAM.state || !EXAM.state.username) return;
+  PAUSED_SESSION_POLL_ID = setInterval(async () => {
+    try {
+      const snap = await getDoc(doc(db, "sessions", EXAM.state.username));
+      if (!snap.exists()) return;
+      const s = snap.data();
+      if (!s.locked) {
+        // admin cleared the lock
+        stopPausedSessionPolling();
+        // hide lock screen and resume
+        document.getElementById("lockScreen").style.display = "none";
+        enterFullscreen(document.documentElement);
+        startTimer();
+        examPaused = false;
+        // update local saved state and resume periodic session saves
+        EXAM.state.locked = false;
+        saveSessionToFirestore(EXAM.state.username, EXAM.state, EXAM.paper);
+        startPeriodicSessionSave();
+        alert("Unlocked by admin — resuming exam.");
+      }
+    } catch (e) {
+      console.warn("paused poll error:", e);
+    }
+  }, 2500); // every 2.5s
+}
+
+function stopPausedSessionPolling() {
+  if (PAUSED_SESSION_POLL_ID) { clearInterval(PAUSED_SESSION_POLL_ID); PAUSED_SESSION_POLL_ID = null; }
+}
+
+// Start polling when we pause
+// modify pauseExam() to call:
+startPausedSessionPolling();
+
+// And make sure stopPausedSessionPolling() is called when user unlocks locally (in unlockExam)
+
 
 // 🔹 Unlock Exam with Password
 function unlockExam() {
@@ -2835,6 +2904,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 </body>
 </html>
+
 
 
 
