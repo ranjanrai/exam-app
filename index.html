@@ -1509,7 +1509,7 @@ async function unlockExamForUser() {
     // prefer existing helper (merges); otherwise fall back to setDoc
     if (typeof saveSessionToFirestore === 'function') {
       // pass explicit locked:false so saveSessionToFirestore keeps it
-      await saveSessionToFirestore(username, { ...EXAM.state, ...payload }, EXAM.paper);
+     await saveSessionToFirestore(username, { ...EXAM.state, ...payload }, EXAM.paper);
     } else {
       await setDoc(doc(db, "sessions", username), payload, { merge: true });
     }
@@ -3306,6 +3306,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 </body>
 </html>
+
 
 
 
