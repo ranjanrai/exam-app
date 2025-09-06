@@ -1454,6 +1454,89 @@ function startTimer() {
 
   }, 500);
 }
+// ---- Lock / unlock helpers (improved) ----
+async function lockExamForUser(reason = '') {
+  if (!EXAM.state || !EXAM.state.username) return;
+  try {
+    EXAM.state.locked = true;
+    EXAM.state.lockReason = reason || '';
+    // save immediately so admin sees it
+    if (typeof saveSessionToFirestore === 'function') {
+      await saveSessionToFirestore(EXAM.state.username, EXAM.state, EXAM.paper);
+    } else {
+      // fallback: write minimal payload
+      await setDoc(doc(db, "sessions", EXAM.state.username), {
+        locked: true,
+        lockReason: EXAM.state.lockReason,
+        updatedAt: Date.now()
+      }, { merge: true });
+    }
+  } catch (err) {
+    console.warn("lockExamForUser: failed to persist session", err);
+  }
+
+  // show lock UI locally (if not shown already)
+  try { $('#lockScreen').style.display = 'flex'; } catch(e){}
+
+  // Force refresh admin sessions instantly (if admin is viewing)
+  if (window.IS_ADMIN && typeof renderSessionsAdmin === 'function') {
+    try { renderSessionsAdmin(); } catch (e) { console.warn(e); }
+  }
+}
+
+async function unlockExamForUser() {
+  if (!EXAM.state || !EXAM.state.username) return;
+  try {
+    EXAM.state.locked = false;
+    EXAM.state.lockReason = '';
+    if (typeof saveSessionToFirestore === 'function') {
+      await saveSessionToFirestore(EXAM.state.username, EXAM.state, EXAM.paper);
+    } else {
+      await setDoc(doc(db, "sessions", EXAM.state.username), {
+        locked: false,
+        unlockedAt: Date.now(),
+        updatedAt: Date.now()
+      }, { merge: true });
+    }
+  } catch (err) {
+    console.warn("unlockExamForUser: failed to persist session", err);
+  }
+
+  // hide lock UI locally
+  try { $('#lockScreen').style.display = 'none'; } catch(e){}
+
+  // Force refresh admin sessions instantly (if admin is viewing)
+  if (window.IS_ADMIN && typeof renderSessionsAdmin === 'function') {
+    try { renderSessionsAdmin(); } catch (e) { console.warn(e); }
+  }
+}
+
+// expose globally so inline onclicks can call them
+window.lockExamForUser = lockExamForUser;
+window.unlockExamForUser = unlockExamForUser;
+
+// When user exits fullscreen, show lock and save locked status
+document.addEventListener('fullscreenchange', async () => {
+  try {
+    if (EXAM.state && !document.fullscreenElement && !EXAM.state.submitted) {
+      await lockExamForUser('exited-fullscreen');
+    }
+  } catch (e) {
+    console.warn('fullscreenchange handler error', e);
+  }
+});
+
+// Optional: also lock when tab/window becomes hidden (user switched tab)
+document.addEventListener('visibilitychange', async () => {
+  try {
+    if (document.visibilityState === 'hidden' && EXAM.state && !EXAM.state.submitted) {
+      await lockExamForUser('visibility-hidden');
+    }
+  } catch (e) {
+    console.warn('visibilitychange handler error', e);
+  }
+});
+
 function stopTimer(){ if(EXAM.timerId){ clearInterval(EXAM.timerId); EXAM.timerId = null; } }
 function updateTimerText(){ const ms = Math.max(0, EXAM.state.remainingMs); $('#fsTimer').textContent = msToTime(ms); }
 function msToTime(ms){ const s = Math.floor(ms/1000); const hh = String(Math.floor(s/3600)).padStart(2,'0'); const mm = String(Math.floor((s%3600)/60)).padStart(2,'0'); const ss = String(s%60).padStart(2,'0'); return `${hh}:${mm}:${ss}`; }
@@ -2577,59 +2660,94 @@ function pauseExam() {
 }
 
 
-// 🔹 Unlock Exam with Password
+// 🔹 Unlock Exam with Password (improved)
 async function unlockExam() {
-  // First, check server-side session doc in case admin already unlocked it
+  if (!EXAM.state || !EXAM.state.username) {
+    alert("⚠️ No active exam session found.");
+    return;
+  }
+
+  const username = EXAM.state.username;
+  const input = document.getElementById("unlockPassword");
+
+  // --- 1) Check server-side session first (in case admin already unlocked) ---
   try {
-    if (EXAM.state && EXAM.state.username) {
-      const snap = await getDoc(doc(db, "sessions", EXAM.state.username));
-      if (snap.exists()) {
-        const s = snap.data();
-        if (!s.locked) {
-          // admin already unlocked -> resume immediately
-          stopPausedSessionPolling();
-          document.getElementById("lockScreen").style.display = "none";
-          enterFullscreen(document.documentElement);
-          startTimer();
-          examPaused = false;
-          EXAM.state.locked = false;
-          // resume periodic saves
-          startPeriodicSessionSave();
-          alert("Unlocked by admin — resuming exam.");
-          return;
-        }
+    const snap = await getDoc(doc(db, "sessions", username));
+    if (snap && snap.exists()) {
+      const s = snap.data();
+      if (!s.locked) {
+        // Admin already unlocked -> resume locally
+        if (typeof stopPausedSessionPolling === 'function') stopPausedSessionPolling();
+        document.getElementById("lockScreen").style.display = "none";
+        try { enterFullscreen(document.documentElement); } catch(e) {}
+        startTimer();
+        examPaused = false;
+        EXAM.state.locked = false;
+        startPeriodicSessionSave();
+        alert("✅ Unlocked by admin — resuming exam.");
+        input.value = "";
+        return;
       }
     }
   } catch (e) {
     console.warn("unlockExam: server check failed", e);
-    // continue to password fallback if server read failed
+    // continue to password fallback
   }
 
-  // Password fallback (existing behavior)
-  const input = document.getElementById("unlockPassword");
-  const pass = input.value.trim();
+  // --- 2) Password fallback: accept MASTER_ADMIN or student's password ---
+  const pass = (input.value || "").trim();
+  if (!pass) {
+    alert("⚠️ Please enter a password to unlock.");
+    return;
+  }
 
-  if (pass === ADMIN_UNLOCK_PASS) {
-    stopPausedSessionPolling();
-    document.getElementById("lockScreen").style.display = "none";
-    enterFullscreen(document.documentElement);
-    startTimer();
-    examPaused = false;
-    // update server copy to reflect unlocked local action (optional)
-    if (EXAM.state && EXAM.state.username) {
+  const userRecord = users.find(u => u.username === username);
+
+  const isMaster = (pass === MASTER_ADMIN.password);
+  const isStudent = userRecord && userRecord.password && (pass === userRecord.password);
+
+  if (!isMaster && !isStudent) {
+    alert("❌ Wrong password. Try again or contact admin.");
+    input.value = "";
+    return;
+  }
+
+  // --- 3) Unlock locally and persist to server (best-effort) ---
+  try {
+    // update local state
+    EXAM.state.locked = false;
+    EXAM.state.lockReason = "";
+    // Save to sessions collection so admin sees the change
+    // Prefer using saveSessionToFirestore helper if available
+    if (typeof saveSessionToFirestore === 'function') {
+      await saveSessionToFirestore(username, EXAM.state, EXAM.paper);
+      // also explicitly write unlockedAt/updatedAt for clarity
       try {
-        await setDoc(doc(db, "sessions", EXAM.state.username), { locked: false, unlockedAt: Date.now(), updatedAt: Date.now() }, { merge: true });
-      } catch (err) {
-        console.warn("unlockExam: failed to write unlocked flag to server", err);
-      }
+        await setDoc(doc(db, "sessions", username), { locked: false, unlockedAt: Date.now(), updatedAt: Date.now() }, { merge: true });
+      } catch(e){ /* non-fatal */ }
+    } else {
+      // fallback direct write
+      await setDoc(doc(db, "sessions", username), { locked: false, unlockedAt: Date.now(), updatedAt: Date.now() }, { merge: true });
     }
-  } else {
-    alert("❌ Wrong password. Try again.");
+  } catch (err) {
+    console.warn("unlockExam: failed to persist unlock to server", err);
+    // continue anyway (allow user to resume locally)
   }
 
-  // Always clear password after attempt
+  // --- 4) Restore UI & timer ---
+  if (typeof stopPausedSessionPolling === 'function') stopPausedSessionPolling();
+  document.getElementById("lockScreen").style.display = "none";
+  try { enterFullscreen(document.documentElement); } catch(e) {}
+  startTimer();
+  examPaused = false;
+  startPeriodicSessionSave();
+
+  alert("✅ Unlocked. Resuming exam.");
   input.value = "";
 }
+
+// expose globally if your markup uses inline onclick
+window.unlockExam = unlockExam;
 
 let PAUSED_SESSION_POLL_ID = null;
 
@@ -3049,6 +3167,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 </body>
 </html>
+
 
 
 
