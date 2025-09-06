@@ -1075,30 +1075,35 @@ async function loadTimer(username) {
 
 // Save session state to Firestore (merge)
 async function saveSessionToFirestore(username, state = null, paper = null) {
-  if (!username) return;
+  if (!username) return false;
   try {
-    // create lightweight snapshot: store paper IDs to reconstruct
-    // ---- replace the payload building in saveSessionToFirestore() with this ----
-const payload = {
-  remainingMs: state?.remainingMs ?? EXAM.state?.remainingMs ?? 0,
-  updatedAt: Date.now(),
-  startedAt: state?.startedAt ?? EXAM.state?.startedAt ?? Date.now(),
-  cur: state?.cur ?? EXAM.cur ?? 0,
-  paperIds: paper ? paper.map(p => p.id) : (EXAM.paper ? EXAM.paper.map(p => p.id) : []),
-  answers: state?.answers ?? EXAM.state?.answers ?? {},
-  flags: state?.flags ?? EXAM.state?.flags ?? {},
-  // NEW: save whether the exam is paused/locked for the user
-  locked: !!(state?.locked || (typeof examPaused !== 'undefined' && examPaused))
-};
-await setDoc(doc(db, "sessions", username), payload, { merge: true });
+    // Build payload: lightweight snapshot to reconstruct session
+    const payload = {
+      remainingMs: state?.remainingMs ?? EXAM.state?.remainingMs ?? 0,
+      updatedAt: Date.now(),
+      startedAt: state?.startedAt ?? EXAM.state?.startedAt ?? Date.now(),
+      cur: state?.cur ?? EXAM.cur ?? 0,
+      paperIds: paper ? paper.map(p => p.id) : (EXAM.paper ? EXAM.paper.map(p => p.id) : []),
+      answers: state?.answers ?? EXAM.state?.answers ?? {},
+      flags: state?.flags ?? EXAM.state?.flags ?? {},
+      // IMPORTANT: prefer explicit state.locked when provided; otherwise fall back to examPaused
+      locked: (state && state.hasOwnProperty('locked')) ? !!state.locked : !!(typeof examPaused !== 'undefined' && examPaused)
+    };
 
-    // console.log("🔁 Session saved for", username);
+    // OPTIONAL: include who unlocked and when if state indicates unlock metadata
+    // (useful for debugging/admin audit). Only include if provided.
+    if (state?.unlockedBy) payload.unlockedBy = state.unlockedBy;
+    if (state?.unlockedAt) payload.unlockedAt = state.unlockedAt;
+
+    await setDoc(doc(db, "sessions", username), payload, { merge: true });
+    // console.log("🔁 Session saved for", username, payload);
     return true;
   } catch (err) {
     console.warn("⚠️ Could not save session:", err);
     return false;
   }
 }
+
 
 // Increment resume counter atomically (client-side simple approach)
 async function incrementSessionResumeCount(username) {
@@ -1485,50 +1490,64 @@ async function lockExamForUser(reason = '') {
 }
 
 async function unlockExamForUser() {
-  if (!EXAM.state || !EXAM.state.username) return;
+  if (!EXAM?.state || !EXAM.state.username) return;
+  const username = EXAM.state.username;
+
   try {
+    // update local state first
     EXAM.state.locked = false;
     EXAM.state.lockReason = '';
+
+    // server payload with audit info
+    const payload = {
+      locked: false,
+      unlockedBy: (window.ADMIN_NAME || window.currentAdmin || "admin"),
+      unlockedAt: Date.now(),
+      updatedAt: Date.now()
+    };
+
+    // prefer existing helper (merges); otherwise fall back to setDoc
     if (typeof saveSessionToFirestore === 'function') {
-      await saveSessionToFirestore(EXAM.state.username, EXAM.state, EXAM.paper);
+      // pass explicit locked:false so saveSessionToFirestore keeps it
+      await saveSessionToFirestore(username, { ...EXAM.state, ...payload }, EXAM.paper);
     } else {
-      await setDoc(doc(db, "sessions", EXAM.state.username), {
-        locked: false,
-        unlockedAt: Date.now(),
-        updatedAt: Date.now()
-      }, { merge: true });
+      await setDoc(doc(db, "sessions", username), payload, { merge: true });
     }
   } catch (err) {
     console.warn("unlockExamForUser: failed to persist session", err);
   }
 
-  // hide lock UI locally
-  try { $('#lockScreen').style.display = 'none'; } catch(e){}
+  // hide lock UI locally (works whether you use $ or plain DOM)
+  try {
+    const el = document.getElementById('lockScreen');
+    if (el) el.style.display = 'none';
+  } catch (e) { /* ignore */ }
 
-  // Force refresh admin sessions instantly (if admin is viewing)
+  // If this client was the locked user, resume timer/UI
+  try {
+    if (EXAM && EXAM.state && EXAM.state.username === username) {
+      if (examPaused) {
+        examPaused = false;
+        try { startTimer(); } catch (e) { console.warn("startTimer failed:", e); }
+        try { startPeriodicSessionSave(); } catch (e) {}
+      }
+      EXAM.state.locked = false;
+    }
+  } catch (e) {
+    console.warn("unlockExamForUser: resume UI error", e);
+  }
+
+  // Refresh admin view if present
   if (window.IS_ADMIN && typeof renderSessionsAdmin === 'function') {
     try { renderSessionsAdmin(); } catch (e) { console.warn(e); }
   }
 
-  // ✅ Stop watchers/pollers once user is unlocked locally
-  stopSessionWatcher();
+  // Stop only the poller fallback (keep realtime watcher active)
   if (typeof stopPausedSessionPolling === 'function') stopPausedSessionPolling();
+
+  // IMPORTANT: DO NOT call stopSessionWatcher() here.
+  // Only call stopSessionWatcher() when the exam session ends (submit) or user logs out.
 }
-
-// expose globally so inline onclicks can call them
-window.lockExamForUser = lockExamForUser;
-window.unlockExamForUser = unlockExamForUser;
-
-// When user exits fullscreen, show lock and save locked status
-document.addEventListener('fullscreenchange', async () => {
-  try {
-    if (EXAM.state && !document.fullscreenElement && !EXAM.state.submitted) {
-      await lockExamForUser('exited-fullscreen');
-    }
-  } catch (e) {
-    console.warn('fullscreenchange handler error', e);
-  }
-});
 
 // Optional: also lock when tab/window becomes hidden (user switched tab)
 document.addEventListener('visibilitychange', async () => {
@@ -1545,44 +1564,83 @@ let SESSION_UNSUBSCRIBE = null;
 
 function startSessionWatcher(username) {
   try {
-    // stop existing if any
-    if (SESSION_UNSUBSCRIBE) { SESSION_UNSUBSCRIBE(); SESSION_UNSUBSCRIBE = null; }
+    // unsubscribe previous listener if present (safe re-subscribe behavior)
+    if (SESSION_UNSUBSCRIBE) {
+      try { SESSION_UNSUBSCRIBE(); } catch(e) {}
+      SESSION_UNSUBSCRIBE = null;
+    }
 
     if (!username) return;
     const ref = doc(db, "sessions", username);
-    // onSnapshot will call immediately with current value, and then whenever doc changes
+
+    // Attach realtime listener and KEEP it active (do NOT unsubscribe inside the callback)
     SESSION_UNSUBSCRIBE = onSnapshot(ref, snap => {
       try {
         if (!snap.exists()) return;
         const s = snap.data();
         console.log("session watcher:", username, s);
-        // If admin cleared lock -> resume
-        if (!s.locked) {
-          // clear any poller too (backwards compat)
-          if (typeof stopPausedSessionPolling === 'function') stopPausedSessionPolling();
 
-          // Resume UI & timer exactly like your existing poll-resume logic
-          try { document.getElementById("lockScreen").style.display = 'none'; } catch(e){}
-          try { enterFullscreen(document.documentElement); } catch(e){}
-          try { startTimer(); } catch(e){}
-          examPaused = false;
-          if (EXAM && EXAM.state) EXAM.state.locked = false;
-          try { saveSessionToFirestore(EXAM.state.username, EXAM.state, EXAM.paper); } catch(e){}
-          try { startPeriodicSessionSave(); } catch(e){}
-          // stop watching until next pause
-          if (SESSION_UNSUBSCRIBE) { SESSION_UNSUBSCRIBE(); SESSION_UNSUBSCRIBE = null; }
-          alert("✅ Unlocked by admin — resuming exam.");
+        if (s.locked) {
+          // When locked: show lock UI and stop timer
+          examPaused = true;
+          if (typeof stopPausedSessionPolling === 'function') stopPausedSessionPolling();
+          if (document.getElementById("lockScreen")) {
+            document.getElementById("lockScreen").style.display = "flex";
+          }
+          if (EXAM && EXAM.timerId) {
+            clearInterval(EXAM.timerId);
+            EXAM.timerId = null;
+          }
+          // keep listening for unlock events
+          return;
         }
+
+        // When unlocked: resume UI & timer (use server state as source-of-truth)
+        // stop poller (compat) and resume user UI
+        if (typeof stopPausedSessionPolling === 'function') stopPausedSessionPolling();
+
+        if (document.getElementById("lockScreen")) {
+          document.getElementById("lockScreen").style.display = "none";
+        }
+
+        // If the local client was paused, resume timer and state
+        if (examPaused) {
+          examPaused = false;
+          // update local EXAM.state so future saves reflect unlocked
+          if (EXAM && EXAM.state) EXAM.state.locked = false;
+
+          // attempt to restart timer and periodic saves (your implementations)
+          try { startTimer(); } catch (e) { console.warn("startTimer failed:", e); }
+          try { startPeriodicSessionSave(); } catch (e) { console.warn("startPeriodicSessionSave failed:", e); }
+
+          console.info("✅ Unlocked by admin — resuming exam.");
+        } else {
+          // Not paused locally but server says unlocked — ensure local state matches
+          if (EXAM && EXAM.state) EXAM.state.locked = false;
+        }
+        // IMPORTANT: DO NOT unsubscribe here — keep listening for future events
       } catch (err) {
         console.warn("session watcher callback error", err);
       }
     }, err => {
-      console.warn("session watcher error", err);
+      console.warn("session watcher onSnapshot error:", err);
+      // If snapshot repeatedly fails, fall back to poller
+      if (typeof startPausedSessionPolling === 'function') startPausedSessionPolling(username);
     });
   } catch (err) {
-    console.warn("startSessionWatcher failed", err);
+    console.warn("startSessionWatcher failed:", err);
+    if (typeof startPausedSessionPolling === 'function') startPausedSessionPolling(username);
   }
 }
+
+// Call this when the exam ends or the user logs out to stop listening
+function stopSessionWatcher() {
+  if (SESSION_UNSUBSCRIBE) {
+    try { SESSION_UNSUBSCRIBE(); } catch (e) { console.warn("stopSessionWatcher unsub error", e); }
+    SESSION_UNSUBSCRIBE = null;
+  }
+}
+
 
 function stopSessionWatcher() {
   try {
@@ -2695,21 +2753,45 @@ document.addEventListener("fullscreenchange", () => {
   }
 });
 
-function pauseExam() {
-  examPaused = true;
-  clearInterval(EXAM.timerId); // stop timer
-  document.getElementById("lockScreen").style.display = "flex";
+async function pauseExam() {
+  try {
+    examPaused = true;
 
-  // Save session immediately and mark it as locked so admin can see it
-  if (EXAM.state && EXAM.state.username) {
-    const username = EXAM.state.username;
-    // include locked: true in state so saveSessionToFirestore will persist it
-    saveSessionToFirestore(username, { ...EXAM.state, locked: true }, EXAM.paper)
-      .catch(e => console.warn("Failed to save locked state:", e));
+    // stop the exam timer (defensive)
+    if (EXAM && EXAM.timerId) {
+      clearInterval(EXAM.timerId);
+      EXAM.timerId = null;
+    }
+
+    // show lock UI
+    const lockNode = document.getElementById("lockScreen");
+    if (lockNode) lockNode.style.display = "flex";
+
+    // ensure EXAM.state exists and mark locked explicitly
+    if (!EXAM) EXAM = {};
+    if (!EXAM.state) EXAM.state = {};
+    EXAM.state.locked = true;
+
+    // persist locked state (await so errors are visible in console)
+    if (EXAM.state.username) {
+      const username = EXAM.state.username;
+      try {
+        await saveSessionToFirestore(username, EXAM.state, EXAM.paper);
+      } catch (e) {
+        console.warn("Failed to persist locked state:", e);
+      }
+      // prefer realtime watcher; stop poller if it exists
+      if (typeof stopPausedSessionPolling === "function") stopPausedSessionPolling();
+      // attach snapshot watcher (idempotent: implementation should handle re-subscribing)
+      if (typeof startSessionWatcher === "function") startSessionWatcher(username);
+    } else {
+      console.warn("pauseExam: no EXAM.state.username to save session for");
+      // fallback: start poller if watcher can't be attached (optional)
+      if (typeof startPausedSessionPolling === "function") startPausedSessionPolling(EXAM?.state?.username);
+    }
+  } catch (err) {
+    console.warn("pauseExam error:", err);
   }
-
-  // START the paused-session poller so admin clear will be detected
-  startSessionWatcher(EXAM.state.username);
 }
 
 
@@ -2803,43 +2885,46 @@ async function unlockExam() {
 // expose if needed by inline onclick
 window.unlockExam = unlockExam;
 
-let PAUSED_SESSION_POLL_ID = null;
-
-function startPausedSessionPolling() {
+let PAUSE_POLLER_ID = null;
+function startPausedSessionPolling(username) {
+  if (!username) return;
+  // don't start polling if snapshot is active
+  if (SESSION_UNSUBSCRIBE) return;
   stopPausedSessionPolling();
-  if (!EXAM.state || !EXAM.state.username) return;
-  PAUSED_SESSION_POLL_ID = setInterval(async () => {
+  PAUSE_POLLER_ID = setInterval(async () => {
     try {
-      const snap = await getDoc(doc(db, "sessions", EXAM.state.username));
+      const docRef = doc(db, "sessions", username);
+      const snap = await getDoc(docRef);
       if (!snap.exists()) return;
       const s = snap.data();
-      if (!s.locked) {
-        // admin cleared the lock
-        stopPausedSessionPolling();
-        // hide lock screen and resume
-        document.getElementById("lockScreen").style.display = "none";
-        enterFullscreen(document.documentElement);
-        startTimer();
-        examPaused = false;
-        // update local saved state and resume periodic session saves
-        EXAM.state.locked = false;
-        saveSessionToFirestore(EXAM.state.username, EXAM.state, EXAM.paper);
-        startPeriodicSessionSave();
-        alert("Unlocked by admin — resuming exam.");
+      if (s.locked) {
+        if (document.getElementById("lockScreen")) {
+          document.getElementById("lockScreen").style.display = "flex";
+        }
+        examPaused = true;
+        clearInterval(EXAM.timerId);
+      } else {
+        if (document.getElementById("lockScreen")) {
+          document.getElementById("lockScreen").style.display = "none";
+        }
+        if (examPaused) {
+          examPaused = false;
+          try { startTimer(); } catch(e){}
+        }
       }
     } catch (e) {
-      console.warn("paused poll error:", e);
+      console.warn("pause poller error:", e);
     }
-  }, 2500); // every 2.5s
+  }, 2500);
 }
 
 function stopPausedSessionPolling() {
-  if (PAUSED_SESSION_POLL_ID) { clearInterval(PAUSED_SESSION_POLL_ID); PAUSED_SESSION_POLL_ID = null; }
+  if (PAUSE_POLLER_ID) {
+    clearInterval(PAUSE_POLLER_ID);
+    PAUSE_POLLER_ID = null;
+  }
 }
 
-// Start polling when we pause
-// modify pauseExam() to call:
-startPausedSessionPolling();
 
 // And make sure stopPausedSessionPolling() is called when user unlocks locally (in unlockExam)
 // -----------------------
@@ -3221,6 +3306,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 </body>
 </html>
+
 
 
 
