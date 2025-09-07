@@ -1117,6 +1117,22 @@ async function startExam(user){
     remainingMs: durationMs,  // ← set baseline
     submitted: false
   };
+  // Ensure username is persistent locally so unlock/lock can find it after visibility change
+try {
+  localStorage.setItem('exam_username', user.username);
+} catch(e){ /* ignore */ }
+
+// Save initial session right away (helps admin unlock and restores)
+try {
+  if (typeof saveSessionToFirestore === 'function') {
+    await saveSessionToFirestore(user.username, EXAM.state, EXAM.paper);
+  } else if (typeof setDoc === 'function' && typeof doc === 'function' && typeof db !== 'undefined') {
+    await setDoc(doc(db, 'sessions', user.username), EXAM.state, { merge: true });
+  }
+} catch(e){
+  console.warn('Initial session save failed', e);
+}
+
   EXAM.cur = 0;
 
   // --- Optional resume logic (only if you WANT it)
@@ -2904,11 +2920,21 @@ async function unlockExam() {
   try {
     console.log('[unlockExam] start');
 
-    if (!window.EXAM || !EXAM.state || !EXAM.state.username) {
-      console.warn('[unlockExam] missing EXAM.state or username', EXAM && EXAM.state);
-      alert("⚠️ No active exam session found.");
-      return;
-    }
+   // recovery guard: if EXAM.state.username missing, try localStorage/session doc
+if (!EXAM || !EXAM.state || !EXAM.state.username) {
+  // try localStorage
+  const recovered = localStorage.getItem('exam_username') || localStorage.getItem('exam.username');
+  if (recovered) {
+    EXAM = EXAM || {};
+    EXAM.state = EXAM.state || {};
+    EXAM.state.username = recovered;
+    console.log('[unlockExam] recovered username from localStorage ->', recovered);
+  } else {
+    // Attempt to find a session doc for any likely username? (optional)
+    alert("⚠️ No active exam session found.");
+    return;
+  }
+}
 
     const username = EXAM.state.username;
     const input = document.getElementById("unlockPassword");
@@ -3439,6 +3465,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 </body>
 </html>
+
 
 
 
