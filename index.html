@@ -71,6 +71,9 @@
   window.getDocs = getDocs;
   window.doc = doc;
   window.collection = collection;
+  // after: window.getDoc = getDoc; window.setDoc = setDoc; etc.
+window.onSnapshot = onSnapshot;
+
   // --- Recover EXAM.state from localStorage on page load (keeps username after reloads)
 document.addEventListener('DOMContentLoaded', () => {
   window.EXAM = window.EXAM || {};
@@ -1755,19 +1758,32 @@ let SESSION_UNSUBSCRIBE = null;
 
 function startSessionWatcher(username) {
   try {
+    // Ensure global unsubscribe var exists (defensive)
+    window.SESSION_UNSUBSCRIBE = window.SESSION_UNSUBSCRIBE || null;
+
     // unsubscribe previous listener if present (safe re-subscribe behavior)
-    if (SESSION_UNSUBSCRIBE) {
-      try { SESSION_UNSUBSCRIBE(); } catch(e) {}
-      SESSION_UNSUBSCRIBE = null;
+    if (window.SESSION_UNSUBSCRIBE) {
+      try { window.SESSION_UNSUBSCRIBE(); } catch(e) { console.warn('SESSION_UNSUBSCRIBE call failed', e); }
+      window.SESSION_UNSUBSCRIBE = null;
     }
 
     if (!username) return;
+
+    // --- Guard: require Firestore realtime helpers ---
+    if (typeof onSnapshot !== 'function' || typeof doc !== 'function' || typeof db === 'undefined') {
+      console.warn('[startSessionWatcher] realtime firestore helpers missing, falling back to polling if available');
+      if (typeof startPausedSessionPolling === 'function') {
+        startPausedSessionPolling(username);
+      }
+      return;
+    }
+
     const ref = doc(db, "sessions", username);
 
     // Attach realtime listener and KEEP it active (do NOT unsubscribe inside the callback)
-    SESSION_UNSUBSCRIBE = onSnapshot(ref, snap => {
+    window.SESSION_UNSUBSCRIBE = onSnapshot(ref, snap => {
       try {
-        if (!snap.exists()) return;
+        if (!snap || (typeof snap.exists === 'function' ? !snap.exists() : !snap.exists)) return;
         const s = snap.data();
         console.log("session watcher:", username, s);
 
@@ -1775,11 +1791,21 @@ function startSessionWatcher(username) {
           // When locked: show lock UI and stop timer
           examPaused = true;
           if (typeof stopPausedSessionPolling === 'function') stopPausedSessionPolling();
-          if (document.getElementById("lockScreen")) {
-            document.getElementById("lockScreen").style.display = "flex";
+
+          const lockEl = document.getElementById("lockScreen");
+          if (lockEl) {
+            lockEl.style.display = "flex";
+            // autofocus unlock input for better UX
+            setTimeout(()=> {
+              const el = document.getElementById('unlockPassword');
+              if (el) {
+                try { el.focus(); } catch(e){/* ignore */ }
+              }
+            }, 120);
           }
+
           if (EXAM && EXAM.timerId) {
-            clearInterval(EXAM.timerId);
+            try { clearInterval(EXAM.timerId); } catch(e){/* ignore */ }
             EXAM.timerId = null;
           }
           // keep listening for unlock events
@@ -1787,12 +1813,10 @@ function startSessionWatcher(username) {
         }
 
         // When unlocked: resume UI & timer (use server state as source-of-truth)
-        // stop poller (compat) and resume user UI
         if (typeof stopPausedSessionPolling === 'function') stopPausedSessionPolling();
 
-        if (document.getElementById("lockScreen")) {
-          document.getElementById("lockScreen").style.display = "none";
-        }
+        const lockEl2 = document.getElementById("lockScreen");
+        if (lockEl2) lockEl2.style.display = "none";
 
         // If the local client was paused, resume timer and state
         if (examPaused) {
@@ -1826,11 +1850,17 @@ function startSessionWatcher(username) {
 
 // Call this when the exam ends or the user logs out to stop listening
 function stopSessionWatcher() {
-  if (SESSION_UNSUBSCRIBE) {
-    try { SESSION_UNSUBSCRIBE(); } catch (e) { console.warn("stopSessionWatcher unsub error", e); }
-    SESSION_UNSUBSCRIBE = null;
+  try {
+    if (window.SESSION_UNSUBSCRIBE) {
+      try { window.SESSION_UNSUBSCRIBE(); } catch (e) { console.warn("stopSessionWatcher unsub error", e); }
+      window.SESSION_UNSUBSCRIBE = null;
+    }
+  } catch(e) {
+    console.warn('stopSessionWatcher error', e);
+    window.SESSION_UNSUBSCRIBE = null;
   }
 }
+
 
 
 function stopSessionWatcher() {
@@ -3536,6 +3566,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 </body>
 </html>
+
 
 
 
