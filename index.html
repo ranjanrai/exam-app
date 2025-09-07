@@ -71,6 +71,34 @@
   window.getDocs = getDocs;
   window.doc = doc;
   window.collection = collection;
+  // --- Recover EXAM.state from localStorage on page load (keeps username after reloads)
+document.addEventListener('DOMContentLoaded', () => {
+  window.EXAM = window.EXAM || {};
+  if (!EXAM.state || !EXAM.state.username) {
+    const savedUser = localStorage.getItem('exam_username') || localStorage.getItem('exam.username');
+    if (savedUser) {
+      EXAM.state = EXAM.state || {};
+      EXAM.state.username = savedUser;
+      EXAM.state.locked = EXAM.state.locked || false;
+      console.log('[boot] restored EXAM.state.username from localStorage ->', savedUser);
+
+      // optional: try to hydrate more session data from Firestore (best-effort)
+      if (typeof getDoc === 'function' && typeof doc === 'function' && typeof db !== 'undefined') {
+        (async () => {
+          try {
+            const snap = await getDoc(doc(db, 'sessions', savedUser));
+            if (snap && snap.exists()) {
+              const s = snap.data();
+              EXAM.state = Object.assign({}, EXAM.state, s);
+              console.log('[boot] hydrated session from Firestore', s);
+            }
+          } catch (e) { console.warn('[boot] firestore session load failed', e); }
+        })();
+      }
+    }
+  }
+});
+
 </script>
 
 
@@ -2958,26 +2986,25 @@ async function pauseExam() {
 }
 
 
-// 🔹 Unlock Exam with Password (robust + debug)
+// 🔹 Unlock Exam with Password (cleaned + robust + debug)
 async function unlockExam() {
+  // --- Recovery guard: populate EXAM.state.username from localStorage if missing ---
+  if (!window.EXAM || !EXAM.state || !EXAM.state.username) {
+    const recovered = localStorage.getItem('exam_username') || localStorage.getItem('exam.username');
+    if (recovered) {
+      window.EXAM = window.EXAM || {};
+      EXAM.state = EXAM.state || {};
+      EXAM.state.username = recovered;
+      EXAM.state.locked = EXAM.state.locked || false;
+      console.log('[unlockExam] recovered username from localStorage ->', recovered);
+    } else {
+      alert("⚠️ No active exam session found.");
+      return;
+    }
+  }
+
   try {
     console.log('[unlockExam] start');
-
-   // recovery guard: if EXAM.state.username missing, try localStorage/session doc
-if (!EXAM || !EXAM.state || !EXAM.state.username) {
-  // try localStorage
-  const recovered = localStorage.getItem('exam_username') || localStorage.getItem('exam.username');
-  if (recovered) {
-    EXAM = EXAM || {};
-    EXAM.state = EXAM.state || {};
-    EXAM.state.username = recovered;
-    console.log('[unlockExam] recovered username from localStorage ->', recovered);
-  } else {
-    // Attempt to find a session doc for any likely username? (optional)
-    alert("⚠️ No active exam session found.");
-    return;
-  }
-}
 
     const username = EXAM.state.username;
     const input = document.getElementById("unlockPassword");
@@ -2991,7 +3018,7 @@ if (!EXAM || !EXAM.state || !EXAM.state.username) {
     try {
       if (typeof getDoc === 'function' && typeof doc === 'function' && typeof db !== 'undefined') {
         const snap = await getDoc(doc(db, "sessions", username));
-        if (snap && snap.exists()) {
+        if (snap && (typeof snap.exists === 'function' ? snap.exists() : snap.exists)) {
           const s = snap.data();
           console.log('[unlockExam] server session:', s);
           if (!s.locked) {
@@ -3085,6 +3112,7 @@ if (!EXAM || !EXAM.state || !EXAM.state.username) {
   }
 }
 window.unlockExam = unlockExam;
+
 
 
 let PAUSE_POLLER_ID = null;
@@ -3508,6 +3536,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 </body>
 </html>
+
 
 
 
