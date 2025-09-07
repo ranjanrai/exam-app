@@ -230,6 +230,51 @@ min-height:80px
 </style>
 </head>
 <body>
+  <!-- ========== HOME / SIGN IN PAGE (NEW) ========== -->
+<section id="home" style="position:fixed;inset:0;background:#3b78b5;display:flex;align-items:center;justify-content:center;z-index:9998;">
+  <button id="homeAdminBtn" style="position:fixed;top:28px;right:34px;padding:10px 18px;border-radius:8px;border:2px solid rgba(255,255,255,0.85);background:transparent;color:white;font-weight:700;cursor:pointer;z-index:10000;">
+    Admin
+  </button>
+
+  <div style="width:720px;max-width:92vw;border-radius:10px;padding:36px 40px 46px;box-sizing:border-box;
+              background:linear-gradient(180deg,#3fb1d9 0%,#2b62a3 100%);border:2px solid rgba(255,255,255,0.6);
+              box-shadow:0 30px 70px rgba(0,0,0,0.25);text-align:center;color:rgba(255,255,255,0.95);">
+    <div style="width:86px;height:86px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;margin:6px auto 10px;border:3px solid rgba(255,255,255,0.6);background: rgba(255,255,255,0.06);">
+      <!-- user icon -->
+      <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:46px;height:46px;opacity:0.95">
+        <circle cx="32" cy="24" r="12" fill="white" fill-opacity="0.95" />
+        <path d="M10 54c0-10 12-18 22-18s22 8 22 18" fill="white" fill-opacity="0.95" />
+      </svg>
+    </div>
+
+    <h1 style="margin:8px 0 24px;font-weight:400;font-size:34px;letter-spacing:1px">Sign in</h1>
+
+    <div style="width:100%;max-width:560px;margin:6px auto;display:flex;align-items:center;gap:12px;padding:10px 6px;border-bottom:1px solid rgba(255,255,255,0.6);">
+      <div style="width:30px;opacity:0.85;">
+        <!-- username icon -->
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+      </div>
+      <input id="homeUsername" type="text" placeholder="Username" style="flex:1;background:transparent;border:0;outline:none;padding:10px 6px;color:rgba(255,255,255,0.95);font-size:16px" />
+    </div>
+
+    <div style="width:100%;max-width:560px;margin:18px auto 0;display:flex;align-items:center;gap:12px;padding:10px 6px;border-bottom:1px solid rgba(255,255,255,0.6);">
+      <div style="width:30px;opacity:0.85;">
+        <!-- password icon -->
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+      </div>
+      <input id="homePassword" type="password" placeholder="Password" style="flex:1;background:transparent;border:0;outline:none;padding:10px 6px;color:rgba(255,255,255,0.95);font-size:16px" />
+    </div>
+
+    <div style="margin-top:22px">
+      <button id="homeLoginBtn" style="background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(0,0,0,0.06)); border:2px solid rgba(255,255,255,0.85); padding:12px 36px; border-radius:8px; font-size:18px; font-weight:600; cursor:pointer;">
+        Login
+      </button>
+      <div style="font-size:13px;opacity:0.9;margin-top:8px">App auto-loads previously stored users & questions on page load.</div>
+    </div>
+  </div>
+</section>
+<!-- ========== END HOME ========== -->
+
 <div class="wrap card">
   <div class="header">
     <div>
@@ -847,16 +892,70 @@ function updateBackup() {
   alert("✅ Backup updated! Please replace the old file when saving.");
 }
 
-/* UI: show sections */
+/* UI: show sections (updated to support 'home' fullscreen) */
 function showSection(id){
+  // hide the home view and app wrap by default
+  const homeEl = document.getElementById('home');
+  const wrapEl = document.querySelector('.wrap');
+
+  if(id === 'home') {
+    if(homeEl) homeEl.classList.remove('hidden');
+    if(wrapEl) wrapEl.classList.add('hidden');
+    return;
+  }
+
+  // show the main app wrap and hide home
+  if(homeEl) homeEl.classList.add('hidden');
+  if(wrapEl) wrapEl.classList.remove('hidden');
+
+  // hide internal sections inside the app
   ['user','import','adminLogin','adminPanel'].forEach(s => { const el = document.getElementById(s); if(!el) return; el.classList.add('hidden'); });
-  document.getElementById(id).classList.remove('hidden');
+  const target = document.getElementById(id);
+  if(target) target.classList.remove('hidden');
+
   if(id === 'adminPanel') {
     renderQuestionsList();
     renderUsersAdmin();
     renderResults();
   }
 }
+// Wire home buttons to existing flows
+document.addEventListener('DOMContentLoaded', ()=> {
+  // Start the app showing the Home view
+  if(typeof showSection === 'function') showSection('home');
+
+  const adminBtn = document.getElementById('homeAdminBtn');
+  if(adminBtn) adminBtn.addEventListener('click', ()=> showSection('adminLogin'));
+
+  const loginBtn = document.getElementById('homeLoginBtn');
+  if(loginBtn) loginBtn.addEventListener('click', async ()=> {
+    // copy values from home inputs to the existing user form and call login
+    const u = document.getElementById('homeUsername').value.trim();
+    const p = document.getElementById('homePassword').value;
+    if(!u || !p) return alert('Enter username and password');
+
+    // fill the existing user form so all logic (photo, resume checks) works as before
+    document.getElementById('userName').value = u;
+    document.getElementById('userPass').value = p;
+
+    // show user section (so any UI messages appear), then call your existing handler
+    showSection('user');
+
+    // call the existing user login handler (if you use the resume version, call that instead)
+    if(typeof handleUserLogin === 'function') {
+      // small delay so UI switches before heavy work
+      setTimeout(()=> handleUserLogin(), 120);
+    } else if(typeof handleUserLogin_withResume === 'function') {
+      setTimeout(()=> handleUserLogin_withResume(), 120);
+    } else {
+      alert('Login handler not found – ensure handleUserLogin exists.');
+    }
+  });
+
+  // Enter key on home password should trigger login
+  document.getElementById('homePassword').addEventListener('keydown', (e)=>{ if(e.key === 'Enter') document.getElementById('homeLoginBtn').click(); });
+});
+
 
 /* ---------- USER FLOW ---------- */
 
@@ -3312,6 +3411,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 </body>
 </html>
+
 
 
 
