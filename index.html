@@ -241,7 +241,6 @@ min-height:80px
     </div>
     <div class="row">
       <button class="btn brand" onclick="showSection('user')">User</button>
-      <button class="btn" onclick="showSection('import')">Import/Export</button>
       <button class="btn" onclick="showSection('adminLogin')">Admin Login</button>
     </div>
   </div>
@@ -272,8 +271,9 @@ min-height:80px
       <div class="small" style="margin-top:8px">If username exists, enter the same password to login. New users must upload photo to register.</div>
     </div>
 
-    <div style="height:12px"></div>
-    <div class="card">
+        <div style="height:12px"></div>
+    <!-- Quick import/export hidden from user view (moved to admin) -->
+    <div class="card hidden" id="quickImportCard">
       <h3>Quick Import / Export</h3>
       <div class="row">
         <button class="btn" onclick="triggerImportUsers()">Import Users (.json)</button>
@@ -284,6 +284,7 @@ min-height:80px
       </div>
       <div class="small" style="margin-top:8px">App auto-loads previously stored users & questions on page load.</div>
     </div>
+
   </section>
 
   <!-- IMPORT / EXPORT -->
@@ -347,6 +348,10 @@ min-height:80px
 
   <!-- ADMIN PANEL (visible after login) -->
 <section id="adminPanel" class="hidden">
+<!-- add this inside adminPanel, e.g. right after <section id="adminPanel"...> -->
+<div style="margin-bottom:10px;">
+  <button class="btn" onclick="showSection('import')">Import / Export (Admin)</button>
+</div>
 
   <!-- Exam Settings Card -->
 <button onclick="resetSettings()">🔄 Reset Settings</button>
@@ -3307,6 +3312,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 </body>
 </html>
+
 
 
 
