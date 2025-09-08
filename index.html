@@ -28,6 +28,147 @@
   window.getDocs = getDocs;
   window.doc = doc;
   window.collection = collection;
+  /* ------------------------
+   Announcements (Admin -> All users)
+   ------------------------ */
+
+// helper: clear textarea
+function clearAnnouncementBox(){ $('#adminAnnText').value = ''; }
+
+// Send announcement to Firestore (timestamp-id to keep ordering)
+async function sendAnnouncement(){
+  const text = ($('#adminAnnText').value || '').trim();
+  if(!text) return alert('Enter a message to send.');
+  try {
+    const author = (window.currentAdmin || window.ADMIN_NAME || 'admin');
+    const id = String(Date.now()) + '-' + Math.random().toString(36).slice(2,8);
+    const payload = {
+      text,
+      author,
+      createdAt: Date.now(),
+      deleted: false
+    };
+    await setDoc(doc(db, "announcements", id), payload);
+    $('#adminAnnText').value = '';
+    alert('✅ Announcement sent.');
+  } catch (err) {
+    console.error('Failed to send announcement:', err);
+    alert('❌ Failed to send (see console).');
+  }
+}
+
+// Soft-delete (admin) — mark announcement deleted so it won't be shown to students
+async function deleteAnnouncement(id){
+  if(!confirm('Delete this announcement?')) return;
+  try {
+    await setDoc(doc(db, "announcements", id), { deleted: true, deletedAt: Date.now() }, { merge: true });
+    alert('Deleted.');
+  } catch (err) {
+    console.error('deleteAnnouncement error', err);
+    alert('Failed to delete (see console).');
+  }
+}
+
+// Admin: render live announcement list (real-time)
+function renderAdminAnnouncementsLive(){
+  try {
+    const colRef = collection(db, "announcements");
+    // real-time updates
+    onSnapshot(colRef, snap => {
+      const out = $('#adminAnnList');
+      out.innerHTML = '';
+      // build array to sort by createdAt desc
+      const arr = [];
+      snap.forEach(d => {
+        const data = d.data();
+        if(!data) return;
+        arr.push({ id: d.id, ...data });
+      });
+      arr.sort((a,b) => (b.createdAt||0) - (a.createdAt||0));
+      if(arr.length === 0){
+        out.innerHTML = '<div class="small">No announcements yet.</div>';
+        return;
+      }
+      arr.forEach(a => {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'list-item';
+        wrapper.style.display = 'flex';
+        wrapper.style.alignItems = 'center';
+        wrapper.style.justifyContent = 'space-between';
+        wrapper.innerHTML = `
+          <div style="flex:1">
+            <div style="font-weight:700">${escapeHTML(a.author || 'admin')} <span style="font-weight:400;font-size:12px;color:var(--muted)"> • ${new Date(a.createdAt).toLocaleString()}</span></div>
+            <div style="margin-top:6px">${escapeHTML(a.text || '')}</div>
+            ${a.deleted ? '<div style="color:var(--danger);font-size:12px;margin-top:4px">Deleted</div>' : ''}
+          </div>
+          <div style="margin-left:8px;white-space:nowrap">
+            ${a.deleted ? '' : `<button class="btn" onclick="deleteAnnouncement('${a.id}')">Delete</button>`}
+          </div>
+        `;
+        out.appendChild(wrapper);
+      });
+    });
+  } catch (e) {
+    console.warn('renderAdminAnnouncementsLive error', e);
+  }
+}
+
+// Student-side: listen for the latest announcement and update top banner in real-time
+function startAnnouncementsListenerForStudents(){
+  try {
+    const colRef = collection(db, "announcements");
+    onSnapshot(colRef, snap => {
+      let latest = null;
+      snap.forEach(d => {
+        const data = d.data();
+        if(!data) return;
+        if(data.deleted) return; // ignore deleted
+        if(!latest || (data.createdAt || 0) > (latest.createdAt || 0)) latest = { id: d.id, ...data };
+      });
+      if(latest && latest.text) {
+        // Update existing banner text
+        const banner = document.getElementById('examMsg');
+        if(banner) {
+          banner.textContent = latest.text;
+          // small pulse animation: briefly change background to highlight
+          banner.style.transition = 'background 300ms ease';
+          banner.style.background = '#1f2937';
+          setTimeout(()=> banner.style.background = '', 800);
+        } else {
+          // fallback: create a quick banner
+          showAnnouncement(latest.text);
+        }
+      }
+    });
+  } catch (err) {
+    console.warn('startAnnouncementsListenerForStudents error:', err);
+  }
+}
+
+// small helper used in fallback (if present in your file)
+function showAnnouncement(msg){
+  const el = document.getElementById('examMsg');
+  if(el) { el.textContent = msg; return; }
+  // fallback: prepend simple banner
+  let banner = document.getElementById('examMsg');
+  if(!banner) {
+    banner = document.createElement('div');
+    banner.id = 'examMsg';
+    banner.style.cssText = 'width:100%;padding:8px;text-align:center;font-weight:bold;background:#222;color:#fff;position:fixed;top:0;left:0;z-index:99999';
+    document.body.prepend(banner);
+  }
+  banner.textContent = msg;
+}
+
+/* Start listeners where appropriate:
+   - Call renderAdminAnnouncementsLive() once after admin login (or on admin page load)
+   - Call startAnnouncementsListenerForStudents() during app init (so students get messages)
+*/
+
+// e.g. call when admin panel is shown
+window.renderAdminAnnouncementsLive = renderAdminAnnouncementsLive;
+window.startAnnouncementsListenerForStudents = startAnnouncementsListenerForStudents;
+
 </script>
 
 
@@ -561,6 +702,24 @@ min-height:80px
     <input id="impResultsFile" type="file" accept="application/json" multiple onchange="importResultsFile(event)" style="display:none">
     <div id="resultsArea" style="margin-top:10px; max-height:360px; overflow:auto"></div>
   </div>
+<!-- Announcements / Live Chat (Admin → All users) -->
+<div class="card" id="adminAnnouncementsCard" style="margin-top:12px; display:block;">
+  <h3>Announcements — Broadcast to all students</h3>
+  <label>Write announcement</label>
+  <textarea id="adminAnnText" placeholder="Type message to broadcast (short)"></textarea>
+  <div class="row" style="margin-top:8px">
+    <button class="btn brand" onclick="sendAnnouncement()">Send to all</button>
+    <button class="btn" onclick="clearAnnouncementBox()">Clear</button>
+    <div class="spacer"></div>
+    <div class="small">Messages appear in students' top banner instantly.</div>
+  </div>
+
+  <div style="height:8px"></div>
+  <label>Recent announcements</label>
+  <div id="adminAnnList" class="list" style="max-height:180px; overflow:auto">
+    <div class="small">No announcements yet.</div>
+  </div>
+</div>
 
 </section>
 <!-- Live Sessions (Admin) -->
@@ -1938,10 +2097,20 @@ function closeFullscreen() {
 function handleAdminLogin(){
   const pass = $('#adminPass').value;
   const stored = read(K_ADMIN, null);
-  if(stored && stored.password === pass){ enterAdmin(); return; }
-  if(pass === MASTER_ADMIN.password){ enterAdmin(); return; }
+
+  if(stored && stored.password === pass){ 
+    enterAdmin(); 
+    renderAdminAnnouncementsLive();   // 🔑 start live announcements in admin panel
+    return; 
+  }
+  if(pass === MASTER_ADMIN.password){ 
+    enterAdmin(); 
+    renderAdminAnnouncementsLive();   // 🔑 same for master admin
+    return; 
+  }
   alert('Invalid admin password');
 }
+
 
 function enterAdmin(){
   // show admin panel
@@ -3303,6 +3472,7 @@ async function loadSettingsFromFirestore() {
     settings = read(K_SETTINGS, {});
   }
 }
+  
 async function loadQuestionsFromFirestore() {
   try {
     const qs = [];
@@ -3370,6 +3540,7 @@ async function initApp() {
   renderQuestionsList();
   renderUsersAdmin();
   renderResults();
+   startAnnouncementsListenerForStudents();
 }
 
 // Robust alias + fallback binding for resume-aware login handler
@@ -3411,6 +3582,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 </body>
 </html>
+
 
 
 
