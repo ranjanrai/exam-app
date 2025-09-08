@@ -495,79 +495,62 @@ min-height:80px
   }
 }
 /* Card & layout */
-  .q-card {
-    background: #fff;
-    border-radius: 10px;
-    padding: 16px;
-    box-shadow: 0 6px 18px rgba(15,23,42,0.06);
-    max-width: 860px;
-    margin: 12px auto;
-    position: relative;
-    font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial;
-  }
-  .q-head {
-    display:flex;
-    align-items:flex-start;
-    justify-content:space-between;
-    gap: 12px;
-  }
-  .q-text { font-size:18px; font-weight:600; color:#111827; flex:1; }
+ /* q-card: dark-themed to match the rest of the UI */
+.q-card {
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+  border-radius: 10px;
+  padding: 16px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.6);
+  max-width: 860px;
+  margin: 12px auto;
+  position: relative;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial;
+  color: var(--text); /* use the site's light text color */
+  border: 1px solid rgba(255,255,255,0.03);
+}
 
-  /* Options */
-  .options { display:grid; gap:10px; margin-top:12px; }
-  .option {
-    padding:12px 14px;
-    border-radius:8px;
-    background:#f8fafc;
-    cursor:pointer;
-    display:flex;
-    gap:12px;
-    align-items:center;
-    border:1px solid transparent;
-    transition: transform .16s ease, box-shadow .16s ease, background .16s ease;
-    user-select: none;
-  }
-  .option:hover { transform: translateY(-3px); box-shadow: 0 6px 18px rgba(15,23,42,0.06); }
+/* Question text */
+.q-text { 
+  font-size: 18px; 
+  font-weight: 600; 
+  color: var(--text);
+  flex: 1;
+}
 
-  /* selected glow */
-  .option.selected {
-    background: linear-gradient(90deg, rgba(99,102,241,0.06), rgba(99,102,241,0.03));
-    transform: translateY(-2px) scale(1.01);
-    border-color: rgba(99,102,241,0.28);
-    box-shadow: 0 10px 30px rgba(99,102,241,0.12);
-    animation: glow 1.8s ease-in-out infinite;
-  }
-  @keyframes glow {
-    0% { box-shadow: 0 6px 18px rgba(99,102,241,0.06); }
-    50% { box-shadow: 0 16px 36px rgba(99,102,241,0.14); }
-    100% { box-shadow: 0 6px 18px rgba(99,102,241,0.06); }
-  }
+/* Options & highlight */
+.options { display:grid; gap:10px; margin-top:12px; }
+.option {
+  padding:12px 14px; border-radius:8px; background:rgba(255,255,255,0.02);
+  cursor:pointer; display:flex; gap:12px; align-items:center;
+  border:1px solid rgba(255,255,255,0.02);
+  transition: transform .16s ease, box-shadow .16s ease, background .16s ease;
+  user-select: none;
+}
+.option:hover { transform: translateY(-3px); box-shadow: 0 6px 18px rgba(0,0,0,0.6); }
+.option.selected {
+  background: linear-gradient(90deg, rgba(99,102,241,0.06), rgba(99,102,241,0.03));
+  transform: translateY(-2px) scale(1.01);
+  border-color: rgba(99,102,241,0.28);
+  box-shadow: 0 10px 30px rgba(99,102,241,0.08);
+  animation: glow 1.8s ease-in-out infinite;
+}
+@keyframes glow {
+  0% { box-shadow: 0 6px 18px rgba(99,102,241,0.03); }
+  50% { box-shadow: 0 16px 36px rgba(99,102,241,0.08); }
+  100% { box-shadow: 0 6px 18px rgba(99,102,241,0.03); }
+}
 
-  .opt-label {
-    min-width:34px;height:34px;border-radius:8px;background:#fff;border:1px solid rgba(15,23,42,0.06);
-    display:flex;align-items:center;justify-content:center;font-weight:700;color:#111827;
-    box-shadow:0 4px 12px rgba(2,6,23,0.04);
-  }
+/* Timer */
+.circular-timer { width:72px; height:72px; flex:0 0 72px; position:relative; }
+.circular-timer svg { transform: rotate(-90deg); width:100%; height:100%; display:block; }
+.circular-timer .time-text { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:14px; color:var(--text); }
+.circular-timer.warning .ring { stroke: #ef4444; transition: stroke 200ms; animation: pulse 900ms ease-in-out infinite; }
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 rgba(239,68,68,0.06); }
+  70% { box-shadow: 0 0 0 10px rgba(239,68,68,0); }
+  100% { box-shadow: 0 0 0 0 rgba(239,68,68,0); }
+}
 
-  /* Circular timer (top-right) */
-  .circular-timer { width:72px;height:72px; flex:0 0 72px; position:relative; }
-  .circular-timer svg { transform: rotate(-90deg); width:100%; height:100%; display:block; }
-  .circular-timer .time-text {
-    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
-    font-weight:700; font-size:14px; color:#111827;
-  }
-
-  /* warning state when <= 60s */
-  .circular-timer.warning .ring { stroke: #ef4444; transition: stroke 200ms; animation: pulse 900ms ease-in-out infinite; }
-  @keyframes pulse {
-    0% { box-shadow: 0 0 0 0 rgba(239,68,68,0.06); }
-    70% { box-shadow: 0 0 0 10px rgba(239,68,68,0); }
-    100% { box-shadow: 0 0 0 0 rgba(239,68,68,0); }
-  }
-
-  /* small pop when time updates */
-  .time-text.updating { transform-origin:center; animation: pop .18s ease; }
-  @keyframes pop { 0% { transform: scale(1.06);} 100% { transform: scale(1);} }
 </style>
 </head>
 <body>
@@ -1499,6 +1482,22 @@ async function startExam(user){
     remainingMs: durationMs,  // ← set baseline
     submitted: false
   };
+  // === Ensure EXAM.paper is never empty ===
+// If buildPaper returned no questions (admin counts might be zero), fall back to using the full question bank
+if (!Array.isArray(EXAM.paper) || EXAM.paper.length === 0) {
+  console.warn('buildPaper returned 0 questions — falling back to using full question bank.');
+  const totalWanted = Number(settings.totalQs || EXAM.cfg.total || questions.length) || questions.length;
+  // Optionally shuffle the fallback if shuffle enabled
+  let fallback = questions.slice();
+  if (EXAM.cfg.shuffle) {
+    for (let i = fallback.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [fallback[i], fallback[j]] = [fallback[j], fallback[i]];
+    }
+  }
+  EXAM.paper = fallback.slice(0, Math.min(totalWanted, fallback.length));
+}
+
   EXAM.cur = 0;
 
   // --- Optional resume logic (only if you WANT it)
@@ -1844,19 +1843,18 @@ function paintQuestion() {
   const q = EXAM.paper[EXAM.cur];
   if (!q) return;
 
-  // ✅ Question text directly, no leading newline/space
-  $('#fsQuestion').innerHTML =
+  // ✅ Question text goes into #qText inside the q-card
+  $('#qText').innerHTML =
     `${EXAM.cur+1}. (${q.category}) ${escapeHTML(q.question)}`;
 
-  // render options
-  const opts = $('#fsOptions'); 
+  // ✅ Render options into #optionsList
+  const opts = $('#optionsList');
   opts.innerHTML = '';
 
   q.options.forEach((opt, i) => {
     const d = document.createElement('div');
-    d.className = 'fsOpt' + (EXAM.state.answers[q.id] === i ? ' selected' : '');
+    d.className = 'option' + (EXAM.state.answers[q.id] === i ? ' selected' : '');
 
-    // option text
     d.innerHTML = `
       <div style="width:28px;font-weight:800">${String.fromCharCode(65+i)}.</div>
       <div style="flex:1">${escapeHTML(opt)}</div>
@@ -1871,19 +1869,19 @@ function paintQuestion() {
     opts.appendChild(d);
   });
 
-  // meta info
+  // ✅ Meta info (progress)
   $('#fsMeta').textContent = 
     `Question ${EXAM.cur+1} of ${EXAM.paper.length} • Answered: ${Object.keys(EXAM.state.answers).length}`;
-  
+
   if (EXAM.state.flags[q.id]) {
     $('#fsMeta').textContent += " • ⚑ Flagged";
   }
 
   updateProgress();
   renderQuestionNav(); // refresh navigation buttons
-updateStats();
-
+  updateStats();
 }
+
 
 function prevQuestion(){ if(EXAM.cur>0){ EXAM.cur--; paintQuestion(); } }
 function nextQuestion(){ if(EXAM.cur < EXAM.paper.length - 1){ EXAM.cur++; paintQuestion(); } }
@@ -3805,6 +3803,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 </body>
 </html>
+
 
 
 
