@@ -168,7 +168,13 @@ function showAnnouncement(msg){
 // e.g. call when admin panel is shown
 window.renderAdminAnnouncementsLive = renderAdminAnnouncementsLive;
 window.startAnnouncementsListenerForStudents = startAnnouncementsListenerForStudents;
-
+  
+// --- expose announcement functions to global scope ---
+window.sendAnnouncement = sendAnnouncement;
+window.clearAnnouncementBox = clearAnnouncementBox;
+window.deleteAnnouncement = deleteAnnouncement;
+window.renderAdminAnnouncementsLive = renderAdminAnnouncementsLive;
+window.startAnnouncementsListenerForStudents = startAnnouncementsListenerForStudents;
 </script>
 
 
@@ -3582,6 +3588,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 </body>
 </html>
+
 
 
 
