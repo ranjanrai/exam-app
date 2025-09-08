@@ -175,6 +175,127 @@ window.clearAnnouncementBox = clearAnnouncementBox;
 window.deleteAnnouncement = deleteAnnouncement;
 window.renderAdminAnnouncementsLive = renderAdminAnnouncementsLive;
 window.startAnnouncementsListenerForStudents = startAnnouncementsListenerForStudents;
+  /* ---------- Utilities ---------- */
+function formatTime(sec){
+  const m = Math.floor(sec/60), s = Math.floor(sec%60);
+  return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]); }
+
+/* ---------- Option selection + glow ---------- */
+let OPTION_NODES = [];
+let CURRENT_CHOICE = null;
+let onChoiceCallback = null;
+
+function renderQuestion(q){
+  const qText = document.getElementById('qText');
+  const optsEl = document.getElementById('optionsList');
+  qText.innerHTML = escapeHtml(q.text || 'Question');
+  optsEl.innerHTML = '';
+  OPTION_NODES = [];
+  CURRENT_CHOICE = null;
+
+  (q.options || []).forEach((opt, i) => {
+    const el = document.createElement('div');
+    el.className = 'option';
+    el.dataset.idx = i;
+    el.innerHTML = `<div class="opt-label">${String.fromCharCode(65+i)}</div><div class="opt-body">${escapeHtml(opt)}</div>`;
+    el.addEventListener('click', () => {
+      selectOption(i, { animate:true, user:true });
+    });
+    optsEl.appendChild(el);
+    OPTION_NODES.push(el);
+  });
+}
+
+/**
+ * selectOption(index, {animate:true/false, user:true/false})
+ */
+function selectOption(index, opts = {}){
+  const { animate=true, user=false } = opts;
+  if (index == null || index < 0 || index >= OPTION_NODES.length) return;
+  OPTION_NODES.forEach(n => n.classList.remove('selected'));
+  const node = OPTION_NODES[index];
+  node.classList.add('selected');
+  if (animate){
+    node.style.transition = 'transform .14s ease';
+    node.style.transform = 'translateY(-2px) scale(1.01)';
+    setTimeout(()=> node.style.transform = '', 160);
+  }
+  CURRENT_CHOICE = index;
+  if (user && typeof onChoiceCallback === 'function') onChoiceCallback(index);
+}
+function setOnChoice(cb){ onChoiceCallback = cb; }
+
+/* ---------- Circular timer ---------- */
+let TIMER = { running:false, total:0, startMs:0, ticker:null, remaining:0 };
+
+function startTimer(totalSeconds, onExpire = ()=>{}, tickMs = 200){
+  stopTimer();
+  const ringEl = document.querySelector('#cTimer .ring');
+  const timerWrap = document.getElementById('cTimer');
+  const timeText = document.getElementById('timeText');
+  const radius = 40;
+  const circumference = 2 * Math.PI * radius;
+  ringEl.style.strokeDasharray = circumference;
+  ringEl.style.strokeDashoffset = 0;
+
+  TIMER.running = true;
+  TIMER.total = totalSeconds;
+  TIMER.startMs = performance.now();
+  TIMER.remaining = totalSeconds;
+
+  function draw(){
+    const elapsed = (performance.now() - TIMER.startMs) / 1000;
+    const rem = Math.max(0, Math.ceil(TIMER.total - elapsed));
+    TIMER.remaining = rem;
+    // ring offset: 0 -> full, circumference -> empty; offset = circumference * (1 - frac)
+    const frac = rem / Math.max(1, TIMER.total);
+    ringEl.style.strokeDashoffset = circumference * (1 - frac);
+
+    // update text (small pop)
+    timeText.textContent = formatTime(rem);
+    timeText.classList.add('updating');
+    setTimeout(()=> timeText.classList.remove('updating'), 150);
+
+    // warning style
+    if (rem <= 60) timerWrap.classList.add('warning'); else timerWrap.classList.remove('warning');
+
+    if (rem <= 0){
+      stopTimer();
+      onExpire();
+    }
+  }
+
+  draw();
+  TIMER.ticker = setInterval(draw, tickMs);
+}
+
+function stopTimer(){
+  if (TIMER.ticker) { clearInterval(TIMER.ticker); TIMER.ticker = null; }
+  TIMER.running = false;
+}
+
+/* ---------- Expose to global so your exam code can call them ---------- */
+window.renderQuestion = renderQuestion;
+window.selectOption = selectOption;
+window.setOnChoice = setOnChoice;
+window.startTimer = startTimer;
+window.stopTimer = stopTimer;
+window.getRemaining = ()=> TIMER.remaining;
+
+/* ---------- Example tiny wiring (remove if you wire externally) ---------- */
+document.addEventListener('DOMContentLoaded', ()=>{
+  // Example question (remove when wiring real data)
+  const example = { text: 'Which is the capital of France?', options: ['Berlin','Madrid','Paris','Rome'] };
+  renderQuestion(example);
+  setOnChoice(idx => {
+    // record answer to your exam state here
+    console.log('Picked', idx);
+  });
+  // start a 5-minute timer (300s); replace with your paper time
+  startTimer(300, ()=> { console.log('Timer expired — call submitExam() here'); });
+});
 </script>
 
 
@@ -373,7 +494,80 @@ min-height:80px
     padding: 0;
   }
 }
+/* Card & layout */
+  .q-card {
+    background: #fff;
+    border-radius: 10px;
+    padding: 16px;
+    box-shadow: 0 6px 18px rgba(15,23,42,0.06);
+    max-width: 860px;
+    margin: 12px auto;
+    position: relative;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial;
+  }
+  .q-head {
+    display:flex;
+    align-items:flex-start;
+    justify-content:space-between;
+    gap: 12px;
+  }
+  .q-text { font-size:18px; font-weight:600; color:#111827; flex:1; }
 
+  /* Options */
+  .options { display:grid; gap:10px; margin-top:12px; }
+  .option {
+    padding:12px 14px;
+    border-radius:8px;
+    background:#f8fafc;
+    cursor:pointer;
+    display:flex;
+    gap:12px;
+    align-items:center;
+    border:1px solid transparent;
+    transition: transform .16s ease, box-shadow .16s ease, background .16s ease;
+    user-select: none;
+  }
+  .option:hover { transform: translateY(-3px); box-shadow: 0 6px 18px rgba(15,23,42,0.06); }
+
+  /* selected glow */
+  .option.selected {
+    background: linear-gradient(90deg, rgba(99,102,241,0.06), rgba(99,102,241,0.03));
+    transform: translateY(-2px) scale(1.01);
+    border-color: rgba(99,102,241,0.28);
+    box-shadow: 0 10px 30px rgba(99,102,241,0.12);
+    animation: glow 1.8s ease-in-out infinite;
+  }
+  @keyframes glow {
+    0% { box-shadow: 0 6px 18px rgba(99,102,241,0.06); }
+    50% { box-shadow: 0 16px 36px rgba(99,102,241,0.14); }
+    100% { box-shadow: 0 6px 18px rgba(99,102,241,0.06); }
+  }
+
+  .opt-label {
+    min-width:34px;height:34px;border-radius:8px;background:#fff;border:1px solid rgba(15,23,42,0.06);
+    display:flex;align-items:center;justify-content:center;font-weight:700;color:#111827;
+    box-shadow:0 4px 12px rgba(2,6,23,0.04);
+  }
+
+  /* Circular timer (top-right) */
+  .circular-timer { width:72px;height:72px; flex:0 0 72px; position:relative; }
+  .circular-timer svg { transform: rotate(-90deg); width:100%; height:100%; display:block; }
+  .circular-timer .time-text {
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    font-weight:700; font-size:14px; color:#111827;
+  }
+
+  /* warning state when <= 60s */
+  .circular-timer.warning .ring { stroke: #ef4444; transition: stroke 200ms; animation: pulse 900ms ease-in-out infinite; }
+  @keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(239,68,68,0.06); }
+    70% { box-shadow: 0 0 0 10px rgba(239,68,68,0); }
+    100% { box-shadow: 0 0 0 0 rgba(239,68,68,0); }
+  }
+
+  /* small pop when time updates */
+  .time-text.updating { transform-origin:center; animation: pop .18s ease; }
+  @keyframes pop { 0% { transform: scale(1.06);} 100% { transform: scale(1);} }
 </style>
 </head>
 <body>
@@ -818,8 +1012,31 @@ min-height:80px
     </div>
     <div id="fsMain">
       <div id="fsScrollArea">
-  <div id="fsQuestion">Question will appear here</div>
-  <div id="fsOptions"></div>
+ <!-- Card -->
+<div class="q-card" id="qCard">
+  <div class="q-head">
+    <div>
+      <div class="q-text" id="qText">Loading question...</div>
+    </div>
+
+    <!-- Timer sits at right -->
+    <div class="circular-timer" id="cTimer" title="Time remaining" role="timer" aria-live="polite">
+      <svg viewBox="0 0 100 100" aria-hidden="true">
+        <circle cx="50" cy="50" r="40" stroke="#e6eefb" stroke-width="10" fill="none"></circle>
+        <circle class="ring" cx="50" cy="50" r="40" stroke="url(#grad)" stroke-width="10" stroke-linecap="round" fill="none"
+                stroke-dasharray="251.2" stroke-dashoffset="0"></circle>
+        <defs>
+          <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="#6366f1"/><stop offset="100%" stop-color="#06b6d4"/>
+          </linearGradient>
+        </defs>
+      </svg>
+      <div class="time-text" id="timeText">--:--</div>
+    </div>
+  </div>
+
+  <div class="options" id="optionsList"></div>
+</div>
 </div>
 
       <!-- NEW: Direct question navigation -->
@@ -3588,6 +3805,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 </body>
 </html>
+
 
 
 
