@@ -3,20 +3,10 @@
 <head>
 <!-- Firebase SDK -->
 <script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
- import {
-    getFirestore,
-    collection,
-    doc,
-    setDoc,
-    getDoc,
-    getDocs,
-    onSnapshot,
-    query,
-    where,
-    writeBatch,
-    addDoc
-  } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
+ import { getFirestore, collection, doc, setDoc, getDocs, getDoc, onSnapshot, query, where, writeBatch } 
+  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+const db = getFirestore(firebaseApp); // or window.db if you already initialized app in a module
   import { getStorage } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
 
   
@@ -36,11 +26,13 @@
 
   // ✅ Expose Firestore helpers globally
   // --- Ensure Firestore helpers are exposed globally (safe reassign) ---
+// at end of module import block (in head)
+window.setDoc = setDoc;
 window.getDoc = getDoc;
 window.getDocs = getDocs;
-window.setDoc = setDoc;
-window.collection = collection;
 window.doc = doc;
+window.collection = collection;
+window.onSnapshot = onSnapshot;
 
   /* ------------------------
    Announcements (Admin -> All users)
@@ -1353,8 +1345,40 @@ document.addEventListener('DOMContentLoaded', ()=> {
   // Enter key on home password should trigger login
   document.getElementById('homePassword').addEventListener('keydown', (e)=>{ if(e.key === 'Enter') document.getElementById('homeLoginBtn').click(); });
 });
+<!-- Ensure Firestore helper functions (exposed by the type="module" script) are ready -->
+
+function ensureFirestoreReady(cb, timeoutMs = 7000) {
+  if (window.getDoc && window.getDocs && window.collection && window.doc && window.setDoc && window.onSnapshot) {
+    try { return cb(); } catch(e){ console.error(e); return; }
+  }
+  const start = Date.now();
+  const id = setInterval(() => {
+    if (window.getDoc && window.getDocs && window.collection && window.doc && window.setDoc && window.onSnapshot) {
+      clearInterval(id);
+      try { cb(); } catch(e){ console.error(e); }
+    } else if (Date.now() - start > timeoutMs) {
+      clearInterval(id);
+      console.error("Firestore helpers didn't become available in time.");
+    }
+  }, 50);
+}
+
+/* Replace any direct initApp() call with this wrapper so init waits for Firestore */
+ensureFirestoreReady(async () => {
+  if (typeof initApp === 'function') {
+    try {
+      await initApp();
+    } catch (e) {
+      console.error('initApp error after Firestore ready:', e);
+    }
+  } else {
+    console.warn('initApp() not found at ensureFirestoreReady time.');
+  }
+});
 
 
+
+  
 /* ---------- USER FLOW ---------- */
 
 /* convert File -> base64 data URL */
@@ -3811,36 +3835,6 @@ async function loadResultsFromFirestore() {
   }
 }
 
-/* ---------- Ensure Firestore helpers are ready before using them ---------- */
-function ensureFirestoreReady(cb, timeoutMs = 5000) {
-  if (window.getDoc && window.getDocs && window.collection && window.doc) {
-    try { return cb(); } catch(e){ console.error(e); return; }
-  }
-  const start = Date.now();
-  const id = setInterval(() => {
-    if (window.getDoc && window.getDocs && window.collection && window.doc) {
-      clearInterval(id);
-      try { cb(); } catch(e){ console.error(e); }
-    } else if (Date.now() - start > timeoutMs) {
-      clearInterval(id);
-      console.error("Firestore helpers didn't become available in time.");
-    }
-  }, 50);
-}
-
-/* Use the wrapper to delay calling initApp() and other firestore-using startup */
-ensureFirestoreReady(async () => {
-  // If your code used to call initApp() immediately at parse-time, do it here instead.
-  if (typeof initApp === 'function') {
-    try {
-      await initApp();
-    } catch (e) {
-      console.error('initApp error', e);
-    }
-  } else {
-    console.warn('initApp() not found — it will be called later.');
-  }
-});
 
 
 // initApp: load required data (keeps your original order & fallbacks)
@@ -3903,6 +3897,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 </body>
 </html>
+
 
 
 
