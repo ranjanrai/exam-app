@@ -728,9 +728,9 @@ min-height:80px
 <div id="answerStats" class="answer-stats"></div>
 
 </div>
-<script>
-   <!-- ✅ Announcements script -->
- 
+<script type="module">
+    const { collection, doc, setDoc, getDoc, onSnapshot } = window.fsc;
+    const db = window.db;
 
     // helper: clear textarea
     function clearAnnouncementBox(){ $('#adminAnnText').value = ''; }
@@ -810,9 +810,12 @@ min-height:80px
     window.deleteAnnouncement = deleteAnnouncement;
     window.renderAdminAnnouncementsLive = renderAdminAnnouncementsLive;
     window.startAnnouncementsListenerForStudents = startAnnouncementsListenerForStudents;
+  </script>
 
-
-  
+  <!-- ✅ Chat script -->
+  <script type="module">
+    const { collection, doc, setDoc, onSnapshot } = window.fsc;
+    const db = window.db;
 
     let CHAT_USER = null;
     let homeChatUnsub = null;
@@ -919,19 +922,8 @@ min-height:80px
       await setDoc(doc(db, "users", CURRENT_CHAT_USER, "messages", id), { from: "admin", to: CURRENT_CHAT_USER, text, createdAt: Date.now() });
       input.value = '';
     }
-
-async function saveToFirestore(collectionName, id, data, localKey=null) {
-  try {
-    if (localKey) write(localKey, data); // keep offline copy
-    await setDoc(doc(db, collectionName, id), data);
-    console.log(`✅ Firestore saved: ${collectionName}/${id}`);
-    return true;
-  } catch (err) {
-    console.warn("⚠️ Firestore save failed, local only", err);
-    return false;
-  }
-}
-
+  </script>
+  <script>
 /* -------------------------
    Storage keys & defaults
    ------------------------- */
@@ -3664,6 +3656,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 </body>
 </html>
+
 
 
 
