@@ -3811,6 +3811,38 @@ async function loadResultsFromFirestore() {
   }
 }
 
+/* ---------- Ensure Firestore helpers are ready before using them ---------- */
+function ensureFirestoreReady(cb, timeoutMs = 5000) {
+  if (window.getDoc && window.getDocs && window.collection && window.doc) {
+    try { return cb(); } catch(e){ console.error(e); return; }
+  }
+  const start = Date.now();
+  const id = setInterval(() => {
+    if (window.getDoc && window.getDocs && window.collection && window.doc) {
+      clearInterval(id);
+      try { cb(); } catch(e){ console.error(e); }
+    } else if (Date.now() - start > timeoutMs) {
+      clearInterval(id);
+      console.error("Firestore helpers didn't become available in time.");
+    }
+  }, 50);
+}
+
+/* Use the wrapper to delay calling initApp() and other firestore-using startup */
+ensureFirestoreReady(async () => {
+  // If your code used to call initApp() immediately at parse-time, do it here instead.
+  if (typeof initApp === 'function') {
+    try {
+      await initApp();
+    } catch (e) {
+      console.error('initApp error', e);
+    }
+  } else {
+    console.warn('initApp() not found — it will be called later.');
+  }
+});
+
+
 // initApp: load required data (keeps your original order & fallbacks)
 async function initApp() {
   await loadSettingsFromFirestore();
@@ -3871,5 +3903,6 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 </body>
 </html>
+
 
 
