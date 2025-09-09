@@ -28,6 +28,104 @@
   window.getDocs = getDocs;
   window.doc = doc;
   window.collection = collection;
+
+  let CHAT_USER = null;
+
+async function sendUserMessage() {
+  if (!CHAT_USER) {
+    CHAT_USER = document.getElementById('chatUsername').value.trim();
+    if (!CHAT_USER) return alert('Enter your name first');
+    // Save user to Firestore so admin can see
+    await setDoc(doc(db, "users", CHAT_USER), { createdAt: Date.now() }, { merge: true });
+    startChatListener(CHAT_USER); // start listening
+  }
+
+  const text = document.getElementById('chatInput').value.trim();
+  if (!text) return;
+  const id = Date.now() + "-" + Math.random().toString(36).slice(2, 8);
+
+  await setDoc(doc(db, "users", CHAT_USER, "messages", id), {
+    from: CHAT_USER,
+    to: "admin",
+    text,
+    createdAt: Date.now()
+  });
+
+  document.getElementById('chatInput').value = '';
+}
+
+function startChatListener(username) {
+  const colRef = collection(db, "users", username, "messages");
+  onSnapshot(colRef, snap => {
+    const out = document.getElementById('chatMessages');
+    out.innerHTML = '';
+    let arr = [];
+    snap.forEach(d => arr.push(d.data()));
+    arr.sort((a,b) => a.createdAt - b.createdAt);
+    arr.forEach(m => {
+      const div = document.createElement('div');
+      div.className = 'list-item';
+      div.textContent = `${m.from}: ${m.text}`;
+      out.appendChild(div);
+    });
+    out.scrollTop = out.scrollHeight;
+  });
+}
+let CURRENT_CHAT_USER = null;
+
+function renderUserList() {
+  const colRef = collection(db, "users");
+  onSnapshot(colRef, snap => {
+    const out = document.getElementById('adminUserList');
+    out.innerHTML = '';
+    snap.forEach(d => {
+      const user = d.id;
+      const btn = document.createElement('button');
+      btn.className = 'btn';
+      btn.textContent = user;
+      btn.onclick = () => openAdminChat(user);
+      out.appendChild(btn);
+    });
+  });
+}
+
+function openAdminChat(user) {
+  CURRENT_CHAT_USER = user;
+  document.getElementById('chatWith').textContent = "Chat with " + user;
+  document.getElementById('adminChat').style.display = 'block';
+
+  const colRef = collection(db, "users", user, "messages");
+  onSnapshot(colRef, snap => {
+    const out = document.getElementById('adminChatMessages');
+    out.innerHTML = '';
+    let arr = [];
+    snap.forEach(d => arr.push(d.data()));
+    arr.sort((a,b) => a.createdAt - b.createdAt);
+    arr.forEach(m => {
+      const div = document.createElement('div');
+      div.className = 'list-item';
+      div.textContent = `${m.from}: ${m.text}`;
+      out.appendChild(div);
+    });
+    out.scrollTop = out.scrollHeight;
+  });
+}
+
+async function sendAdminMessage() {
+  if (!CURRENT_CHAT_USER) return;
+  const text = document.getElementById('adminChatInput').value.trim();
+  if (!text) return;
+  const id = Date.now() + "-" + Math.random().toString(36).slice(2, 8);
+
+  await setDoc(doc(db, "users", CURRENT_CHAT_USER, "messages", id), {
+    from: "admin",
+    to: CURRENT_CHAT_USER,
+    text,
+    createdAt: Date.now()
+  });
+
+  document.getElementById('adminChatInput').value = '';
+}
   /* ------------------------
    Announcements (Admin -> All users)
    ------------------------ */
@@ -176,103 +274,7 @@ window.deleteAnnouncement = deleteAnnouncement;
 window.renderAdminAnnouncementsLive = renderAdminAnnouncementsLive;
 window.startAnnouncementsListenerForStudents = startAnnouncementsListenerForStudents;
 
- let CHAT_USER = null;
-
-async function sendUserMessage() {
-  if (!CHAT_USER) {
-    CHAT_USER = document.getElementById('chatUsername').value.trim();
-    if (!CHAT_USER) return alert('Enter your name first');
-    // Save user to Firestore so admin can see
-    await setDoc(doc(db, "users", CHAT_USER), { createdAt: Date.now() }, { merge: true });
-    startChatListener(CHAT_USER); // start listening
-  }
-
-  const text = document.getElementById('chatInput').value.trim();
-  if (!text) return;
-  const id = Date.now() + "-" + Math.random().toString(36).slice(2, 8);
-
-  await setDoc(doc(db, "users", CHAT_USER, "messages", id), {
-    from: CHAT_USER,
-    to: "admin",
-    text,
-    createdAt: Date.now()
-  });
-
-  document.getElementById('chatInput').value = '';
-}
-
-function startChatListener(username) {
-  const colRef = collection(db, "users", username, "messages");
-  onSnapshot(colRef, snap => {
-    const out = document.getElementById('chatMessages');
-    out.innerHTML = '';
-    let arr = [];
-    snap.forEach(d => arr.push(d.data()));
-    arr.sort((a,b) => a.createdAt - b.createdAt);
-    arr.forEach(m => {
-      const div = document.createElement('div');
-      div.className = 'list-item';
-      div.textContent = `${m.from}: ${m.text}`;
-      out.appendChild(div);
-    });
-    out.scrollTop = out.scrollHeight;
-  });
-}
-let CURRENT_CHAT_USER = null;
-
-function renderUserList() {
-  const colRef = collection(db, "users");
-  onSnapshot(colRef, snap => {
-    const out = document.getElementById('adminUserList');
-    out.innerHTML = '';
-    snap.forEach(d => {
-      const user = d.id;
-      const btn = document.createElement('button');
-      btn.className = 'btn';
-      btn.textContent = user;
-      btn.onclick = () => openAdminChat(user);
-      out.appendChild(btn);
-    });
-  });
-}
-
-function openAdminChat(user) {
-  CURRENT_CHAT_USER = user;
-  document.getElementById('chatWith').textContent = "Chat with " + user;
-  document.getElementById('adminChat').style.display = 'block';
-
-  const colRef = collection(db, "users", user, "messages");
-  onSnapshot(colRef, snap => {
-    const out = document.getElementById('adminChatMessages');
-    out.innerHTML = '';
-    let arr = [];
-    snap.forEach(d => arr.push(d.data()));
-    arr.sort((a,b) => a.createdAt - b.createdAt);
-    arr.forEach(m => {
-      const div = document.createElement('div');
-      div.className = 'list-item';
-      div.textContent = `${m.from}: ${m.text}`;
-      out.appendChild(div);
-    });
-    out.scrollTop = out.scrollHeight;
-  });
-}
-
-async function sendAdminMessage() {
-  if (!CURRENT_CHAT_USER) return;
-  const text = document.getElementById('adminChatInput').value.trim();
-  if (!text) return;
-  const id = Date.now() + "-" + Math.random().toString(36).slice(2, 8);
-
-  await setDoc(doc(db, "users", CURRENT_CHAT_USER, "messages", id), {
-    from: "admin",
-    to: CURRENT_CHAT_USER,
-    text,
-    createdAt: Date.now()
-  });
-
-  document.getElementById('adminChatInput').value = '';
-}
+ 
 </script>
 
 
@@ -3707,6 +3709,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 </body>
 </html>
+
 
 
 
