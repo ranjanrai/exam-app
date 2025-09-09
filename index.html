@@ -114,6 +114,32 @@ function renderAdminAnnouncementsLive(){
 }
 
 // Student-side: listen for the latest announcement and update top banner in real-time
+// helper: normalize Firestore timestamp (returns milliseconds number)
+function _normalizeTs(ts){
+  if (!ts) return 0;
+  if (typeof ts.toMillis === 'function') return ts.toMillis();
+  if (ts.seconds) return Number(ts.seconds) * 1000;
+  const n = Number(ts);
+  return isNaN(n) ? 0 : n;
+}
+
+// helper to update home page banner (create minimal animation)
+function updateHomeAnnouncement(msg){
+  const el = document.getElementById('homeAnnouncement');
+  if(!el) return;
+  if(msg && msg.length){
+    el.textContent = msg;
+    el.style.display = 'block';
+    el.style.transition = 'transform 220ms ease, background 300ms ease, opacity 220ms ease';
+    el.style.transform = 'scale(1.01)';
+    el.style.opacity = '1';
+    setTimeout(()=> el.style.transform = 'scale(1)', 220);
+  } else {
+    el.style.opacity = '0';
+    setTimeout(()=> { if(el) el.style.display = 'none'; }, 240);
+  }
+}
+
 function startAnnouncementsListenerForStudents(){
   try {
     const colRef = collection(db, "announcements");
@@ -123,10 +149,15 @@ function startAnnouncementsListenerForStudents(){
         const data = d.data();
         if(!data) return;
         if(data.deleted) return; // ignore deleted
-        if(!latest || (data.createdAt || 0) > (latest.createdAt || 0)) latest = { id: d.id, ...data };
+
+        const createdNum = _normalizeTs(data.createdAt);
+        if(!latest || createdNum > (latest._createdAtNum || 0)) {
+          latest = { id: d.id, ...data, _createdAtNum: createdNum };
+        }
       });
+
       if(latest && latest.text) {
-        // Update existing banner text
+        // Update existing top banner text
         const banner = document.getElementById('examMsg');
         if(banner) {
           banner.textContent = latest.text;
@@ -135,15 +166,26 @@ function startAnnouncementsListenerForStudents(){
           banner.style.background = '#1f2937';
           setTimeout(()=> banner.style.background = '', 800);
         } else {
-          // fallback: create a quick banner
-          showAnnouncement(latest.text);
+          // fallback: create a quick banner with existing helper if available
+          if(typeof showAnnouncement === 'function'){
+            showAnnouncement(latest.text);
+          } else {
+            console.log('Announcement:', latest.text);
+          }
         }
+
+        // Also update the home/sign-in banner (if present)
+        updateHomeAnnouncement(latest.text);
+      } else {
+        // No valid latest announcement found — hide home banner if present
+        updateHomeAnnouncement('');
       }
     });
   } catch (err) {
     console.warn('startAnnouncementsListenerForStudents error:', err);
   }
 }
+
 
 // small helper used in fallback (if present in your file)
 function showAnnouncement(msg){
@@ -416,6 +458,11 @@ min-height:80px
       <button id="homeLoginBtn" style="background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(0,0,0,0.06)); border:2px solid rgba(255,255,255,0.85); padding:12px 36px; border-radius:8px; font-size:18px; font-weight:600; cursor:pointer;">
         Login
       </button>
+      <!-- paste inside <section id="home"> somewhere near the top -->
+<div id="homeAnnouncement"
+     style="display:none; z-index:10002; max-width:1100px; margin:12px auto 0; padding:8px 12px;
+            background:#072b4a; color:#fff; text-align:center; border-radius:8px; font-weight:700;">
+</div>
       <div style="font-size:13px;opacity:0.9;margin-top:8px">Made by Ranjan Ray.</div>
     </div>
   </div>
@@ -3588,3 +3635,4 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 </body>
 </html>
+
