@@ -4,7 +4,19 @@
 <!-- Firebase SDK -->
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-  import { getFirestore, collection, doc, setDoc, getDocs, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+ import {
+    getFirestore,
+    collection,
+    doc,
+    setDoc,
+    getDoc,
+    getDocs,
+    onSnapshot,
+    query,
+    where,
+    writeBatch,
+    addDoc
+  } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
   import { getStorage } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
 
   
@@ -23,11 +35,13 @@
   window.storage = getStorage(app);
 
   // ✅ Expose Firestore helpers globally
-  window.setDoc = setDoc;
-  window.getDoc = getDoc;
-  window.getDocs = getDocs;
-  window.doc = doc;
-  window.collection = collection;
+  // --- Ensure Firestore helpers are exposed globally (safe reassign) ---
+window.getDoc = getDoc;
+window.getDocs = getDocs;
+window.setDoc = setDoc;
+window.collection = collection;
+window.doc = doc;
+
   /* ------------------------
    Announcements (Admin -> All users)
    ------------------------ */
@@ -3756,10 +3770,11 @@ async function loadQuestionsFromFirestore() {
   }
 }
 
+a// load settings from Firestore (fixed 'async' keyword)
 async function loadSettingsFromFirestore() {
   try {
     const snap = await getDoc(doc(db, "settings", "exam"));
-    if (snap.exists()) {
+    if (snap && snap.exists()) {
       settings = snap.data();                 // ← overwrite fully
       settings.durationMin = Number(settings.durationMin ?? 30);
       write(K_SETTINGS, settings);            // cache for offline only
@@ -3775,6 +3790,28 @@ async function loadSettingsFromFirestore() {
     settings.durationMin = Number(settings.durationMin ?? 30);
   }
 }
+
+// load results from Firestore — simple helper used by initApp()
+async function loadResultsFromFirestore() {
+  try {
+    const colRef = collection(db, "results");
+    const snap = await getDocs(colRef);
+    const arr = [];
+    snap.forEach(d => arr.push({ id: d.id, ...d.data() }));
+    // store into your runtime results variable (adjust if your code uses a different name)
+    results = arr;
+    write(K_RESULTS, results); // optional: cache locally
+    console.log("✅ Loaded results from Firestore:", arr.length);
+    return arr;
+  } catch (err) {
+    console.warn("⚠️ loadResultsFromFirestore failed", err);
+    // fall back to local storage (keeps behavior consistent with your initApp)
+    results = read(K_RESULTS, []);
+    return results;
+  }
+}
+
+// initApp: load required data (keeps your original order & fallbacks)
 async function initApp() {
   await loadSettingsFromFirestore();
   await loadQuestionsFromFirestore();
@@ -3792,7 +3829,7 @@ async function initApp() {
   renderQuestionsList();
   renderUsersAdmin();
   renderResults();
-   startAnnouncementsListenerForStudents();
+  startAnnouncementsListenerForStudents();
 }
 
 // Robust alias + fallback binding for resume-aware login handler
@@ -3834,4 +3871,5 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 </body>
 </html>
+
 
