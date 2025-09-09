@@ -3,33 +3,253 @@
 <head>
 <!-- Firebase SDK -->
 <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import { 
-      getFirestore, collection, doc, setDoc, getDoc, getDocs, 
-      onSnapshot, query, orderBy, updateDoc, deleteDoc 
-    } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-    import { getStorage } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getFirestore, collection, doc, setDoc, getDocs, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+  import { getStorage } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
 
-    const firebaseConfig = {
-      apiKey: "AIzaSyC7X0B65qfWiSkSaC_-dXElw687ZmVM9gU",
-      authDomain: "exam-system-2ed90.firebaseapp.com",
-      projectId: "exam-system-2ed90",
-      storageBucket: "exam-system-2ed90.appspot.com",
-      messagingSenderId: "576581410555",
-      appId: "1:576581410555:web:e38cea3f14d10e5daa5a5e",
-      measurementId: "G-BCFKVMVTBE"
+  
+  const firebaseConfig = {
+    apiKey: "AIzaSyC7X0B65qfWiSkSaC_-dXElw687ZmVM9gU",
+    authDomain: "exam-system-2ed90.firebaseapp.com",
+    projectId: "exam-system-2ed90",
+    storageBucket: "exam-system-2ed90.appspot.com",
+    messagingSenderId: "576581410555",
+    appId: "1:576581410555:web:e38cea3f14d10e5daa5a5e",
+    measurementId: "G-BCFKVMVTBE"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  window.db = getFirestore(app);
+  window.storage = getStorage(app);
+
+  // ✅ Expose Firestore helpers globally
+  window.setDoc = setDoc;
+  window.getDoc = getDoc;
+  window.getDocs = getDocs;
+  window.doc = doc;
+  window.collection = collection;
+  /* ------------------------
+   Announcements (Admin -> All users)
+   ------------------------ */
+
+// helper: clear textarea
+function clearAnnouncementBox(){ $('#adminAnnText').value = ''; }
+
+// Send announcement to Firestore (timestamp-id to keep ordering)
+async function sendAnnouncement(){
+  const text = ($('#adminAnnText').value || '').trim();
+  if(!text) return alert('Enter a message to send.');
+  try {
+    const author = (window.currentAdmin || window.ADMIN_NAME || 'admin');
+    const id = String(Date.now()) + '-' + Math.random().toString(36).slice(2,8);
+    const payload = {
+      text,
+      author,
+      createdAt: Date.now(),
+      deleted: false
     };
+    await setDoc(doc(db, "announcements", id), payload);
+    $('#adminAnnText').value = '';
+    alert('✅ Announcement sent.');
+  } catch (err) {
+    console.error('Failed to send announcement:', err);
+    alert('❌ Failed to send (see console).');
+  }
+}
 
-    // Initialize Firebase
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
-    const storage = getStorage(app);
+// Soft-delete (admin) — mark announcement deleted so it won't be shown to students
+async function deleteAnnouncement(id){
+  if(!confirm('Delete this announcement?')) return;
+  try {
+    await setDoc(doc(db, "announcements", id), { deleted: true, deletedAt: Date.now() }, { merge: true });
+    alert('Deleted.');
+  } catch (err) {
+    console.error('deleteAnnouncement error', err);
+    alert('Failed to delete (see console).');
+  }
+}
 
-    // Expose globally
-    window.db = db;
-    window.storage = storage;
-    window.fsc = { collection, doc, setDoc, getDoc, getDocs, onSnapshot, query, orderBy, updateDoc, deleteDoc };
-  </script>
+// Admin: render live announcement list (real-time)
+function renderAdminAnnouncementsLive(){
+  try {
+    const colRef = collection(db, "announcements");
+    // real-time updates
+    onSnapshot(colRef, snap => {
+      const out = $('#adminAnnList');
+      out.innerHTML = '';
+      // build array to sort by createdAt desc
+      const arr = [];
+      snap.forEach(d => {
+        const data = d.data();
+        if(!data) return;
+        arr.push({ id: d.id, ...data });
+      });
+      arr.sort((a,b) => (b.createdAt||0) - (a.createdAt||0));
+      if(arr.length === 0){
+        out.innerHTML = '<div class="small">No announcements yet.</div>';
+        return;
+      }
+      arr.forEach(a => {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'list-item';
+        wrapper.style.display = 'flex';
+        wrapper.style.alignItems = 'center';
+        wrapper.style.justifyContent = 'space-between';
+        wrapper.innerHTML = `
+          <div style="flex:1">
+            <div style="font-weight:700">${escapeHTML(a.author || 'admin')} <span style="font-weight:400;font-size:12px;color:var(--muted)"> • ${new Date(a.createdAt).toLocaleString()}</span></div>
+            <div style="margin-top:6px">${escapeHTML(a.text || '')}</div>
+            ${a.deleted ? '<div style="color:var(--danger);font-size:12px;margin-top:4px">Deleted</div>' : ''}
+          </div>
+          <div style="margin-left:8px;white-space:nowrap">
+            ${a.deleted ? '' : `<button class="btn" onclick="deleteAnnouncement('${a.id}')">Delete</button>`}
+          </div>
+        `;
+        out.appendChild(wrapper);
+      });
+    });
+  } catch (e) {
+    console.warn('renderAdminAnnouncementsLive error', e);
+  }
+}
+
+// Student-side: listen for the latest announcement and update top banner in real-time
+function startAnnouncementsListenerForStudents(){
+  try {
+    const colRef = collection(db, "announcements");
+    onSnapshot(colRef, snap => {
+      let latest = null;
+      snap.forEach(d => {
+        const data = d.data();
+        if(!data) return;
+        if(data.deleted) return; // ignore deleted
+        if(!latest || (data.createdAt || 0) > (latest.createdAt || 0)) latest = { id: d.id, ...data };
+      });
+      if(latest && latest.text) {
+        // Update existing banner text
+        const banner = document.getElementById('examMsg');
+        if(banner) {
+          banner.textContent = latest.text;
+          // small pulse animation: briefly change background to highlight
+          banner.style.transition = 'background 300ms ease';
+          banner.style.background = '#1f2937';
+          setTimeout(()=> banner.style.background = '', 800);
+        } else {
+          // fallback: create a quick banner
+          showAnnouncement(latest.text);
+        }
+      }
+    });
+  } catch (err) {
+    console.warn('startAnnouncementsListenerForStudents error:', err);
+  }
+}
+
+// small helper used in fallback (if present in your file)
+function showAnnouncement(msg){
+  const el = document.getElementById('examMsg');
+  if(el) { el.textContent = msg; return; }
+  // fallback: prepend simple banner
+  let banner = document.getElementById('examMsg');
+  if(!banner) {
+    banner = document.createElement('div');
+    banner.id = 'examMsg';
+    banner.style.cssText = 'width:100%;padding:8px;text-align:center;font-weight:bold;background:#222;color:#fff;position:fixed;top:0;left:0;z-index:99999';
+    document.body.prepend(banner);
+  }
+  banner.textContent = msg;
+}
+
+/* Start listeners where appropriate:
+   - Call renderAdminAnnouncementsLive() once after admin login (or on admin page load)
+   - Call startAnnouncementsListenerForStudents() during app init (so students get messages)
+*/
+
+// e.g. call when admin panel is shown
+window.renderAdminAnnouncementsLive = renderAdminAnnouncementsLive;
+window.startAnnouncementsListenerForStudents = startAnnouncementsListenerForStudents;
+  
+// --- expose announcement functions to global scope ---
+window.sendAnnouncement = sendAnnouncement;
+window.clearAnnouncementBox = clearAnnouncementBox;
+window.deleteAnnouncement = deleteAnnouncement;
+window.renderAdminAnnouncementsLive = renderAdminAnnouncementsLive;
+window.startAnnouncementsListenerForStudents = startAnnouncementsListenerForStudents;
+
+      let CHAT_USER = null;
+  let homeChatUnsub = null;
+
+  document.addEventListener('DOMContentLoaded', () => {
+    const sendBtn = document.getElementById('chatSendBtn');
+    const input   = document.getElementById('chatInput');
+
+    if (sendBtn) sendBtn.addEventListener('click', sendUserMessage);
+    if (input) {
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          sendUserMessage();
+        }
+      });
+    }
+  });
+
+  async function ensureChatUser() {
+    if (CHAT_USER) return CHAT_USER;
+    const name = (document.getElementById('chatUsername')?.value || '').trim();
+    if (!name) { alert('Enter your name first'); throw new Error('Missing name'); }
+    CHAT_USER = name;
+
+    await setDoc(doc(db, "users", CHAT_USER), { createdAt: Date.now() }, { merge: true });
+
+    startChatListener(CHAT_USER);
+    return CHAT_USER;
+  }
+
+  async function sendUserMessage() {
+    try {
+      const user = await ensureChatUser();
+      const text = (document.getElementById('chatInput')?.value || '').trim();
+      if (!text) return;
+
+      const id = Date.now() + "-" + Math.random().toString(36).slice(2, 8);
+
+      await setDoc(doc(db, "users", user, "messages", id), {
+        from: user,
+        to: "admin",
+        text,
+        createdAt: Date.now()
+      });
+
+      document.getElementById('chatInput').value = '';
+    } catch(e) {
+      console.error(e);
+    }
+  }
+
+  function startChatListener(username) {
+    if (homeChatUnsub) { homeChatUnsub(); homeChatUnsub = null; }
+
+    const colRef = collection(db, "users", username, "messages");
+    homeChatUnsub = onSnapshot(colRef, (snap) => {
+      const out = document.getElementById('chatMessages');
+      if (!out) return;
+      const arr = [];
+      snap.forEach(d => arr.push(d.data()));
+      arr.sort((a, b) => (a.createdAt||0) - (b.createdAt||0));
+
+      out.innerHTML = '';
+      arr.forEach(m => {
+        const div = document.createElement('div');
+        div.style.margin = "6px 0";
+        div.style.whiteSpace = "pre-wrap";
+        div.textContent = `${m.from}: ${m.text}`;
+        out.appendChild(div);
+      });
+      out.scrollTop = out.scrollHeight;
+    });
+  }
+</script>
 
 
 <meta charset="utf-8"/>
@@ -728,201 +948,6 @@ min-height:80px
 <div id="answerStats" class="answer-stats"></div>
 
 </div>
-<script type="module">
-    const { collection, doc, setDoc, getDoc, onSnapshot } = window.fsc;
-    const db = window.db;
-
-    // helper: clear textarea
-    function clearAnnouncementBox(){ $('#adminAnnText').value = ''; }
-
-    async function sendAnnouncement(){
-      const text = ($('#adminAnnText').value || '').trim();
-      if(!text) return alert('Enter a message to send.');
-      try {
-        const author = (window.currentAdmin || window.ADMIN_NAME || 'admin');
-        const id = String(Date.now()) + '-' + Math.random().toString(36).slice(2,8);
-        const payload = { text, author, createdAt: Date.now(), deleted: false };
-        await setDoc(doc(db, "announcements", id), payload);
-        $('#adminAnnText').value = '';
-        alert('✅ Announcement sent.');
-      } catch (err) {
-        console.error('Failed to send announcement:', err);
-        alert('❌ Failed to send (see console).');
-      }
-    }
-
-    async function deleteAnnouncement(id){
-      if(!confirm('Delete this announcement?')) return;
-      try {
-        await setDoc(doc(db, "announcements", id), { deleted: true, deletedAt: Date.now() }, { merge: true });
-        alert('Deleted.');
-      } catch (err) {
-        console.error('deleteAnnouncement error', err);
-        alert('Failed to delete (see console).');
-      }
-    }
-
-    function renderAdminAnnouncementsLive(){
-      try {
-        const colRef = collection(db, "announcements");
-        onSnapshot(colRef, snap => {
-          const out = $('#adminAnnList');
-          out.innerHTML = '';
-          const arr = [];
-          snap.forEach(d => arr.push({ id: d.id, ...d.data() }));
-          arr.sort((a,b) => (b.createdAt||0) - (a.createdAt||0));
-          arr.forEach(a => {
-            const wrapper = document.createElement('div');
-            wrapper.className = 'list-item';
-            wrapper.textContent = `${a.author}: ${a.text}`;
-            out.appendChild(wrapper);
-          });
-        });
-      } catch (e) {
-        console.warn('renderAdminAnnouncementsLive error', e);
-      }
-    }
-
-    function startAnnouncementsListenerForStudents(){
-      try {
-        const colRef = collection(db, "announcements");
-        onSnapshot(colRef, snap => {
-          let latest = null;
-          snap.forEach(d => {
-            const data = d.data();
-            if(data && !data.deleted && (!latest || (data.createdAt||0) > (latest.createdAt||0))) {
-              latest = { id: d.id, ...data };
-            }
-          });
-          if(latest && latest.text) {
-            const banner = document.getElementById('examMsg');
-            if(banner) banner.textContent = latest.text;
-          }
-        });
-      } catch (err) {
-        console.warn('startAnnouncementsListenerForStudents error:', err);
-      }
-    }
-
-    // Expose globally
-    window.sendAnnouncement = sendAnnouncement;
-    window.clearAnnouncementBox = clearAnnouncementBox;
-    window.deleteAnnouncement = deleteAnnouncement;
-    window.renderAdminAnnouncementsLive = renderAdminAnnouncementsLive;
-    window.startAnnouncementsListenerForStudents = startAnnouncementsListenerForStudents;
-  </script>
-
-  <!-- ✅ Chat script -->
-  <script type="module">
-    const { collection, doc, setDoc, onSnapshot } = window.fsc;
-    const db = window.db;
-
-    let CHAT_USER = null;
-    let homeChatUnsub = null;
-
-    document.addEventListener('DOMContentLoaded', () => {
-      const sendBtn = document.getElementById('chatSendBtn');
-      const input   = document.getElementById('chatInput');
-      if (sendBtn) sendBtn.addEventListener('click', sendUserMessage);
-      if (input) input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendUserMessage(); }
-      });
-    });
-
-    async function ensureChatUser() {
-      if (CHAT_USER) return CHAT_USER;
-      const name = (document.getElementById('chatUsername')?.value || '').trim();
-      if (!name) { alert('Enter your name first'); throw new Error('Missing name'); }
-      CHAT_USER = name;
-      await setDoc(doc(db, "users", CHAT_USER), { createdAt: Date.now() }, { merge: true });
-      startChatListener(CHAT_USER);
-      return CHAT_USER;
-    }
-
-    async function sendUserMessage() {
-      try {
-        const user = await ensureChatUser();
-        const text = (document.getElementById('chatInput')?.value || '').trim();
-        if (!text) return;
-        const id = Date.now() + "-" + Math.random().toString(36).slice(2, 8);
-        await setDoc(doc(db, "users", user, "messages", id), { from: user, to: "admin", text, createdAt: Date.now() });
-        document.getElementById('chatInput').value = '';
-      } catch(e) { console.error(e); }
-    }
-
-    function startChatListener(username) {
-      if (homeChatUnsub) { homeChatUnsub(); homeChatUnsub = null; }
-      const colRef = collection(db, "users", username, "messages");
-      homeChatUnsub = onSnapshot(colRef, (snap) => {
-        const out = document.getElementById('chatMessages');
-        if (!out) return;
-        const arr = [];
-        snap.forEach(d => arr.push(d.data()));
-        arr.sort((a, b) => (a.createdAt||0) - (b.createdAt||0));
-        out.innerHTML = '';
-        arr.forEach(m => {
-          const div = document.createElement('div');
-          div.style.margin = "6px 0";
-          div.textContent = `${m.from}: ${m.text}`;
-          out.appendChild(div);
-        });
-        out.scrollTop = out.scrollHeight;
-      });
-    }
-
-    // ✅ Admin side
-    let CURRENT_CHAT_USER = null;
-    let adminThreadUnsub = null;
-    window.initAdminChat = function initAdminChat() {
-      const usersCol = collection(db, "users");
-      onSnapshot(usersCol, (snap) => {
-        const out = document.getElementById('adminUserList');
-        if (!out) return;
-        out.innerHTML = '';
-        snap.forEach(d => {
-          const user = d.id;
-          const btn = document.createElement('button');
-          btn.className = 'btn';
-          btn.textContent = user;
-          btn.onclick = () => openAdminChat(user);
-          out.appendChild(btn);
-        });
-      });
-    };
-
-    function openAdminChat(user) {
-      CURRENT_CHAT_USER = user;
-      document.getElementById('adminChatWith').textContent = "Chat with " + user;
-      document.getElementById('adminChat').style.display = 'block';
-      if (adminThreadUnsub) { adminThreadUnsub(); adminThreadUnsub = null; }
-      const colRef = collection(db, "users", user, "messages");
-      adminThreadUnsub = onSnapshot(colRef, (snap) => {
-        const out = document.getElementById('adminChatMessages');
-        if (!out) return;
-        out.innerHTML = '';
-        const arr = [];
-        snap.forEach(d => arr.push(d.data()));
-        arr.sort((a,b) => (a.createdAt||0) - (b.createdAt||0));
-        arr.forEach(m => {
-          const line = document.createElement('div');
-          line.style.margin = "6px 0";
-          line.textContent = `${m.from}: ${m.text}`;
-          out.appendChild(line);
-        });
-        out.scrollTop = out.scrollHeight;
-      });
-    }
-
-    async function sendAdminMessage() {
-      if (!CURRENT_CHAT_USER) return;
-      const input = document.getElementById('adminChatInput');
-      const text = (input?.value || '').trim();
-      if (!text) return;
-      const id = Date.now() + "-" + Math.random().toString(36).slice(2, 8);
-      await setDoc(doc(db, "users", CURRENT_CHAT_USER, "messages", id), { from: "admin", to: CURRENT_CHAT_USER, text, createdAt: Date.now() });
-      input.value = '';
-    }
-  </script>
   <script>
 /* -------------------------
    Storage keys & defaults
@@ -3656,6 +3681,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 </body>
 </html>
+
 
 
 
