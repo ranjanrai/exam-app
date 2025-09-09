@@ -458,17 +458,6 @@ min-height:80px
       <button id="homeLoginBtn" style="background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(0,0,0,0.06)); border:2px solid rgba(255,255,255,0.85); padding:12px 36px; border-radius:8px; font-size:18px; font-weight:600; cursor:pointer;">
         Login
       </button>
-      <!-- add this right below the homePassword input area inside <section id="home"> -->
-<div style="width:100%;max-width:560px;margin:18px auto 0;display:flex;align-items:center;gap:12px;padding:10px 6px;border-bottom:1px solid rgba(255,255,255,0.6);">
-  <div style="width:30px;opacity:0.85;">
-    <!-- message icon -->
-    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-    </svg>
-  </div>
-  <input id="homeUserNote" type="text" placeholder="Message for admin (optional) — shown to admin" style="flex:1;background:transparent;border:0;outline:none;padding:10px 6px;color:rgba(255,255,255,0.95);font-size:15px" />
-</div>
-
       <!-- paste inside <section id="home"> somewhere near the top -->
 <div id="homeAnnouncement"
      style="display:none; z-index:10002; max-width:1100px; margin:12px auto 0; padding:8px 12px;
@@ -1194,27 +1183,14 @@ async function handleUserLogin_withResume(){
   if(!username || !pass) return alert('Enter username and password');
 
   let user = users.find(u => u.username === username && u.password === pass);
- if(!user){
-  if(!file) return alert('New user: upload photo to register');
-  const photo = await fileToDataURL(file);
-  const fullName = username;
-
-  // read the home note if present (works both from home and from user page)
-  const noteEl = document.getElementById('homeUserNote') || document.getElementById('userNote');
-  const note = noteEl ? (noteEl.value || '').trim() : '';
-
-  user = { username, password: pass, photo, fullName, note };   // <-- note field added
-  users.push(user);
-
-  // save locally and to Firestore (best-effort)
-  write(K_USERS, users);
-  try {
-    await setDoc(doc(db, "users", user.username), user);
-    console.log("✅ saved user to Firestore:", user.username);
-  } catch (err) {
-    console.warn("⚠️ Could not save user to Firestore:", err);
+  if(!user){
+    if(!file) return alert('New user: upload photo to register');
+    const photo = await fileToDataURL(file);
+    const fullName = username;
+    user = { username, password: pass, photo, fullName };
+    users.push(user);
+    saveToFirestore("users", user.username, user);
   }
-}
 
   // ❗ Block users who already attempted
   const arr = await getResultsArray();
@@ -2399,37 +2375,17 @@ function renderUsersAdmin(){
   const box = $('#adminUsersList');
   box.innerHTML = '';
   users.forEach((u, i) => {
-   const wrapper = document.createElement('div');
-wrapper.className = 'list-item';
-wrapper.style.display = 'flex';
-wrapper.style.alignItems = 'center';
-wrapper.style.justifyContent = 'space-between';
-
-// left: photo + info
-const left = document.createElement('div');
-left.style.display = 'flex';
-left.style.gap = '10px';
-left.style.alignItems = 'center';
-left.innerHTML = `
-  <img src="${u.photo || ''}" class="userPhoto" style="width:48px;height:48px;border-radius:8px;object-fit:cover" />
-  <div style="max-width:220px">
-    <div style="font-weight:700">${escapeHTML(u.fullName || u.username)} <span class="small" style="font-weight:400">• ${escapeHTML(u.username)}</span></div>
-    <div class="small" style="margin-top:6px;color:var(--muted)">Note: ${escapeHTML(u.note || '')}</div>
-  </div>
-`;
-
-// right: actions
-const actions = document.createElement('div');
-actions.style.whiteSpace = 'nowrap';
-actions.innerHTML = `
-  <button class="btn" onclick="prefillPersonalAnnouncement('${u.username}')">Message this user</button>
-  <button class="btn danger" onclick="adminDeleteUser('${u.username}')">Delete</button>
-`;
-
-// assemble
-wrapper.appendChild(left);
-wrapper.appendChild(actions);
-out.appendChild(wrapper);
+    const div = document.createElement('div');
+    div.className = 'userRow';
+    div.innerHTML = `
+      <img src="${u.photo || ''}" class="userPhoto">
+      <span><b>${u.fullName || ''}</b> (${u.username})</span>
+      <button onclick="adminEditUser(${i})">Edit</button>
+      <button onclick="adminDeleteUser(${i})">Delete</button>
+    `;
+    box.appendChild(div);
+  });
+}
 
 
 function adminClearUsers(){ if(!confirm('Delete ALL users?')) return; users = []; write(K_USERS, users); renderUsersAdmin(); }
@@ -3675,28 +3631,8 @@ document.addEventListener('DOMContentLoaded', () => {
   // If your HTML uses <button onclick="handleUserLogin()"> and that still fails,
   // make sure this script runs AFTER that button is parsed (that's why DOMContentLoaded).
 });
-function prefillPersonalAnnouncement(username) {
-  // find user
-  const u = users.find(x => x.username === username) || null;
-  if (!u) return alert("User not found");
-
-  // Form a default personal announcement — admin can edit before sending
-  const defaultMsg = (u.note && u.note.length) ? `${u.note}` : `Hello ${u.fullName || u.username}, you have a message.`;
-
-  // Option 1: Prepend mention so admin knows who it's for
-  const prefill = `@${username} ${defaultMsg}`;
-
-  const el = document.getElementById('adminAnnText');
-  if (!el) {
-    alert('Announcement box not found');
-    return;
-  }
-  el.value = prefill;
-  el.focus();
-}
 
 </script>
 </body>
 </html>
-
 
