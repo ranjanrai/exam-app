@@ -1347,34 +1347,6 @@ document.addEventListener('DOMContentLoaded', ()=> {
 });
 <!-- Ensure Firestore helper functions (exposed by the type="module" script) are ready -->
 
-function ensureFirestoreReady(cb, timeoutMs = 7000) {
-  if (window.getDoc && window.getDocs && window.collection && window.doc && window.setDoc && window.onSnapshot) {
-    try { return cb(); } catch(e){ console.error(e); return; }
-  }
-  const start = Date.now();
-  const id = setInterval(() => {
-    if (window.getDoc && window.getDocs && window.collection && window.doc && window.setDoc && window.onSnapshot) {
-      clearInterval(id);
-      try { cb(); } catch(e){ console.error(e); }
-    } else if (Date.now() - start > timeoutMs) {
-      clearInterval(id);
-      console.error("Firestore helpers didn't become available in time.");
-    }
-  }, 50);
-}
-
-/* Replace any direct initApp() call with this wrapper so init waits for Firestore */
-ensureFirestoreReady(async () => {
-  if (typeof initApp === 'function') {
-    try {
-      await initApp();
-    } catch (e) {
-      console.error('initApp error after Firestore ready:', e);
-    }
-  } else {
-    console.warn('initApp() not found at ensureFirestoreReady time.');
-  }
-});
 
 
 
@@ -3741,10 +3713,42 @@ function showImportMessage(msg) {
   banner.style.display = "block";   // ensure it's visible
 }
 
-// Run on startup
+
+/* Ensure Firestore module helpers are ready before starting the app.
+   Paste this in the main non-module <script> — before any Firestore use and
+   in place of the simple DOMContentLoaded/initApp call. */
+function ensureFirestoreReady(cb, timeoutMs = 7000) {
+  if (window.getDoc && window.getDocs && window.collection && window.doc && window.setDoc && window.onSnapshot) {
+    try { return cb(); } catch(e){ console.error(e); return; }
+  }
+  const start = Date.now();
+  const id = setInterval(() => {
+    if (window.getDoc && window.getDocs && window.collection && window.doc && window.setDoc && window.onSnapshot) {
+      clearInterval(id);
+      try { cb(); } catch(e){ console.error(e); }
+    } else if (Date.now() - start > timeoutMs) {
+      clearInterval(id);
+      console.error("Firestore helpers didn't become available in time.");
+    }
+  }, 50);
+}
+
+/* Start app only after Firestore helpers are available */
 window.addEventListener("DOMContentLoaded", () => {
-  initApp();
-})
+  ensureFirestoreReady(async () => {
+    if (typeof initApp === 'function') {
+      try {
+        await initApp();
+      } catch (e) {
+        console.error('initApp error after Firestore ready:', e);
+      }
+    } else {
+      console.warn('initApp() not found — it will be called later.');
+    }
+  });
+});
+
+
 
 async function loadSettingsFromFirestore() {
   try {
@@ -3897,6 +3901,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 </body>
 </html>
+
 
 
 
