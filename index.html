@@ -730,9 +730,7 @@ min-height:80px
 </div>
 <script>
    <!-- ✅ Announcements script -->
-  <script type="module">
-    const { collection, doc, setDoc, getDoc, onSnapshot } = window.fsc;
-    const db = window.db;
+ 
 
     // helper: clear textarea
     function clearAnnouncementBox(){ $('#adminAnnText').value = ''; }
@@ -814,10 +812,7 @@ min-height:80px
     window.startAnnouncementsListenerForStudents = startAnnouncementsListenerForStudents;
 
 
-  <!-- ✅ Chat script -->
-  <script type="module">
-    const { collection, doc, setDoc, onSnapshot } = window.fsc;
-    const db = window.db;
+  
 
     let CHAT_USER = null;
     let homeChatUnsub = null;
@@ -3669,6 +3664,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 </body>
 </html>
+
 
 
 
