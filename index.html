@@ -82,7 +82,10 @@ function renderAdminAnnouncementsLive(){
       snap.forEach(d => {
         const data = d.data();
         if(!data) return;
-        arr.push({ id: d.id, ...data });
+        const data = d.data();
+if (!data) return;
+arr.push({ id: d.id, ...data });
+
       });
       arr.sort((a,b) => (b.createdAt||0) - (a.createdAt||0));
       if(arr.length === 0){
@@ -1139,38 +1142,36 @@ document.addEventListener('DOMContentLoaded', ()=> {
   const adminBtn = document.getElementById('homeAdminBtn');
   if(adminBtn) adminBtn.addEventListener('click', ()=> showSection('adminLogin'));
 
-  const loginBtn = document.getElementById('homeLoginBtn');
-  if(loginBtn) loginBtn.addEventListener('click', async ()=> {
-    // copy values from home inputs to the existing user form and call login
-    const u = document.getElementById('homeUsername').value.trim();
-    const p = document.getElementById('homePassword').value;
-    if(!u || !p) return alert('Enter username and password');
+  const homeLoginBtn = document.getElementById('homeLoginBtn');
+if (homeLoginBtn) homeLoginBtn.addEventListener('click', async () => {
+  const u = document.getElementById('homeUsername').value.trim();
+  const p = document.getElementById('homePassword').value;
+  if (!u || !p) return alert('Enter username and password');
 
-    // fill the existing user form so all logic (photo, resume checks) works as before
-    document.getElementById('userName').value = u;
-    document.getElementById('userPass').value = p;
-    loginBtn.click();
-     writeHomeLogin(u);
+  // fill the existing user form so the same login logic is used
+  document.getElementById('userName').value = u;
+  document.getElementById('userPass').value = p;
 
+  // NEW: save home-signin BEFORE calling the login logic
+  try { await writeHomeLogin(u); } catch(e){ console.warn('writeHomeLogin error', e); }
 
-    // show user section (so any UI messages appear), then call your existing handler
-    showSection('user');
+  // show user section and then call existing login handler
+  showSection('user');
 
-    // call the existing user login handler (if you use the resume version, call that instead)
-    if(typeof handleUserLogin === 'function') {
-      // small delay so UI switches before heavy work
-      setTimeout(()=> handleUserLogin(), 120);
-    } else if(typeof handleUserLogin_withResume === 'function') {
-      setTimeout(()=> handleUserLogin_withResume(), 120);
-    } else {
-      alert('Login handler not found – ensure handleUserLogin exists.');
-    }
-  });
+  if (typeof handleUserLogin === 'function') {
+    setTimeout(()=> handleUserLogin(), 120);
+  } else if (typeof handleUserLogin_withResume === 'function') {
+    setTimeout(()=> handleUserLogin_withResume(), 120);
+  } else {
+    alert('Login handler not found – ensure handleUserLogin exists.');
+  }
+});
+
 
   // Enter key on home password should trigger login
   document.getElementById('homePassword').addEventListener('keydown', (e)=>{ if(e.key === 'Enter') document.getElementById('homeLoginBtn').click(); });
 });
-enderAdminHomeLoginsLive
+
 
 /* ---------- USER FLOW ---------- */
 
@@ -2270,7 +2271,9 @@ function renderAdminHomeLoginsLive() {
     snap.forEach(d => {
       const data = d.data();
       if (!data) return;
-      arr.push({ id: d.id, ...data });
+     const data = d.data();
+if (!data) return;
+arr.push({ id: d.id, ...data });
     });
     if (arr.length === 0) {
       container.innerHTML = '<div class="small">No sign-ins yet.</div>';
@@ -3771,5 +3774,6 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 </body>
 </html>
+
 
 
