@@ -1149,6 +1149,9 @@ document.addEventListener('DOMContentLoaded', ()=> {
     // fill the existing user form so all logic (photo, resume checks) works as before
     document.getElementById('userName').value = u;
     document.getElementById('userPass').value = p;
+    loginBtn.click();
+     writeHomeLogin(u);
+
 
     // show user section (so any UI messages appear), then call your existing handler
     showSection('user');
@@ -1167,7 +1170,7 @@ document.addEventListener('DOMContentLoaded', ()=> {
   // Enter key on home password should trigger login
   document.getElementById('homePassword').addEventListener('keydown', (e)=>{ if(e.key === 'Enter') document.getElementById('homeLoginBtn').click(); });
 });
-
+enderAdminHomeLoginsLive
 
 /* ---------- USER FLOW ---------- */
 
@@ -1355,6 +1358,32 @@ async function startExam(user){
 await saveSessionToFirestore(user.username, EXAM.state, EXAM.paper);
 startPeriodicSessionSave();
 }
+function startPrivateMessagesListenerForUser(username) {
+  if (!username) return;
+  // We wrote private messages as docs in collection `private_messages` with id = username__messageId
+  // We'll do a simple query to fetch docs that start with username + '__'
+  const colRef = collection(db, "private_messages");
+  // Real app: change to a query if you want structured doc paths. This simple listener filters client-side.
+  onSnapshot(colRef, snap => {
+    snap.forEach(d => {
+      const id = d.id;
+      if (!id.startsWith(username + '__')) return;
+      const data = d.data();
+      if (!data || data.read) {
+        // optionally skip already-read messages
+      }
+      // show to user (simple alert here; replace with nicer UI)
+      alert('📩 Private message from ' + (data.author||'admin') + ':\n\n' + (data.text||''));
+      // mark read by updating the doc (merge)
+      setDoc(doc(db, "private_messages", id), { read: true, readAt: Date.now() }, { merge: true }).catch(()=>{});
+    });
+  }, err => console.warn('private_messages listener error', err));
+}
+window.startPrivateMessagesListenerForUser = startPrivateMessagesListenerForUser;
+
+// Call it once when a user logs in / exam starts:
+ // e.g. inside startExam(user) or after successful login:
+ // startPrivateMessagesListenerForUser(user.username);
 
 async function loadTimer(username) {
   try {
@@ -1419,7 +1448,23 @@ async function saveSessionToFirestore(username, state = null, paper = null) {
     return false;
   }
 }
-
+// Save a login record to Firestore (home_logins collection)
+async function writeHomeLogin(username, fullName = '', photo = '') {
+  if (!username) return;
+  try {
+    const id = username;
+    const payload = {
+      username,
+      fullName: fullName || username,
+      photo: photo || '',
+      lastSeen: Date.now()
+    };
+    await setDoc(doc(db, "home_logins", id), payload, { merge: true });
+    console.log('✅ home_logins saved for', username);
+  } catch (err) {
+    console.warn('⚠️ writeHomeLogin failed', err);
+  }
+}
 
 // Increment resume counter atomically (client-side simple approach)
 async function incrementSessionResumeCount(username) {
@@ -2194,6 +2239,97 @@ function logoutAdmin() {
   // show the default user/home section
   showSection('user'); // or 'home' depending on your flow
 }
+
+  // Admin: render live list of home logins and allow sending private message
+function renderAdminHomeLoginsLive() {
+  const outId = 'adminHomeLoginsList';
+  // create container in DOM if not present
+  let container = document.getElementById(outId);
+  if (!container) {
+    // insert inside adminPanel near adminAnnouncementsCard (adjust as needed)
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.style.marginTop = '12px';
+    card.innerHTML = `
+      <h3>Home Sign-ins (live)</h3>
+      <div id="${outId}" class="list" style="max-height:260px; overflow:auto">
+        <div class="small">Loading…</div>
+      </div>
+    `;
+    // append card to adminPanel (assumes element id 'adminPanel' exists)
+    const adminPanel = document.getElementById('adminPanel');
+    if (adminPanel) adminPanel.insertBefore(card, adminPanel.firstChild);
+    container = document.getElementById(outId);
+  }
+
+  // subscribe to live collection
+  const colRef = collection(db, "home_logins");
+  onSnapshot(colRef, snap => {
+    container.innerHTML = '';
+    const arr = [];
+    snap.forEach(d => {
+      const data = d.data();
+      if (!data) return;
+      arr.push({ id: d.id, ...data });
+    });
+    if (arr.length === 0) {
+      container.innerHTML = '<div class="small">No sign-ins yet.</div>';
+      return;
+    }
+
+    arr.sort((a,b) => (b.lastSeen||0) - (a.lastSeen||0));
+    arr.forEach(u => {
+      const row = document.createElement('div');
+      row.className = 'list-item';
+      row.style.display = 'flex';
+      row.style.alignItems = 'center';
+      row.style.justifyContent = 'space-between';
+      row.innerHTML = `
+        <div style="display:flex;gap:10px;align-items:center;flex:1">
+          <img src="${u.photo||''}" class="userPhoto" style="width:44px;height:44px;border-radius:8px">
+          <div>
+            <div style="font-weight:700">${escapeHTML(u.fullName || u.username)}</div>
+            <div class="small">${escapeHTML(u.username)} • ${new Date(u.lastSeen).toLocaleString()}</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;min-width:300px">
+          <input type="text" placeholder="Private message..." data-user="${u.username}" style="flex:1;padding:6px;border-radius:8px;background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--text)">
+          <button class="btn brand" onclick='sendPrivateMessage("${u.username}")'>Send</button>
+        </div>
+      `;
+      container.appendChild(row);
+    });
+  }, err => {
+    console.warn('home_logins listener error', err);
+  });
+}
+
+// Admin helper: send a private message document under private_messages/{username}/{messageId}
+async function sendPrivateMessageToUser(username, text) {
+  if (!username || !text || !text.trim()) return alert('Enter a message to send.');
+  try {
+    const id = String(Date.now()) + '-' + Math.random().toString(36).slice(2,8);
+    const payload = { text: text.trim(), author: (window.currentAdmin || 'admin'), createdAt: Date.now(), read: false };
+    await setDoc(doc(db, "private_messages", username + '__' + id), payload);
+    alert('✅ Message sent to ' + username);
+  } catch (err) {
+    console.error('sendPrivateMessageToUser error', err);
+    alert('❌ Failed to send (see console).');
+  }
+}
+
+// small wrapper so the inline onclick above can call it directly
+window.sendPrivateMessage = function(username) {
+  // find corresponding input (closest query)
+  const sel = document.querySelector(`input[data-user="${username}"]`);
+  const text = sel ? sel.value : '';
+  if (!text || !text.trim()) return alert('Enter a message to send.');
+  sendPrivateMessageToUser(username, text);
+  if (sel) sel.value = '';
+};
+
+// Call this when admin panel loads (after admin login)
+window.renderAdminHomeLoginsLive = renderAdminHomeLoginsLive;
 
 /* Questions CRUD in admin */
 let editingId = null;
@@ -3635,4 +3771,5 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 </body>
 </html>
+
 
