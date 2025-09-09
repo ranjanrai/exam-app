@@ -22,9 +22,6 @@
   window.db = getFirestore(app);
   window.storage = getStorage(app);
 
-  window.db = db;
-  window.fsc = { collection, doc, setDoc, onSnapshot, getDocs, query, orderBy };
-
   // ✅ Expose Firestore helpers globally
   window.setDoc = setDoc;
   window.getDoc = getDoc;
@@ -3685,4 +3682,5 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 </body>
 </html>
+
 
