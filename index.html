@@ -176,80 +176,103 @@ window.deleteAnnouncement = deleteAnnouncement;
 window.renderAdminAnnouncementsLive = renderAdminAnnouncementsLive;
 window.startAnnouncementsListenerForStudents = startAnnouncementsListenerForStudents;
 
-  let CHAT_USER = null;
-  let homeChatUnsub = null;
+ let CHAT_USER = null;
 
-  document.addEventListener('DOMContentLoaded', () => {
-    const sendBtn = document.getElementById('chatSendBtn');
-    const input   = document.getElementById('chatInput');
+async function sendUserMessage() {
+  if (!CHAT_USER) {
+    CHAT_USER = document.getElementById('chatUsername').value.trim();
+    if (!CHAT_USER) return alert('Enter your name first');
+    // Save user to Firestore so admin can see
+    await setDoc(doc(db, "users", CHAT_USER), { createdAt: Date.now() }, { merge: true });
+    startChatListener(CHAT_USER); // start listening
+  }
 
-    if (sendBtn) sendBtn.addEventListener('click', sendUserMessage);
-    if (input) {
-      input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-          e.preventDefault();
-          sendUserMessage();
-        }
-      });
-    }
+  const text = document.getElementById('chatInput').value.trim();
+  if (!text) return;
+  const id = Date.now() + "-" + Math.random().toString(36).slice(2, 8);
+
+  await setDoc(doc(db, "users", CHAT_USER, "messages", id), {
+    from: CHAT_USER,
+    to: "admin",
+    text,
+    createdAt: Date.now()
   });
 
-  async function ensureChatUser() {
-    if (CHAT_USER) return CHAT_USER;
-    const name = (document.getElementById('chatUsername')?.value || '').trim();
-    if (!name) { alert('Enter your name first'); throw new Error('Missing name'); }
-    CHAT_USER = name;
+  document.getElementById('chatInput').value = '';
+}
 
-    await setDoc(doc(db, "users", CHAT_USER), { createdAt: Date.now() }, { merge: true });
-
-    startChatListener(CHAT_USER);
-    return CHAT_USER;
-  }
-
-  async function sendUserMessage() {
-    try {
-      const user = await ensureChatUser();
-      const text = (document.getElementById('chatInput')?.value || '').trim();
-      if (!text) return;
-
-      const id = Date.now() + "-" + Math.random().toString(36).slice(2, 8);
-
-      await setDoc(doc(db, "users", user, "messages", id), {
-        from: user,
-        to: "admin",
-        text,
-        createdAt: Date.now()
-      });
-
-      document.getElementById('chatInput').value = '';
-    } catch(e) {
-      console.error(e);
-    }
-  }
-
-  function startChatListener(username) {
-    if (homeChatUnsub) { homeChatUnsub(); homeChatUnsub = null; }
-
-    const colRef = collection(db, "users", username, "messages");
-    homeChatUnsub = onSnapshot(colRef, (snap) => {
-      const out = document.getElementById('chatMessages');
-      if (!out) return;
-      const arr = [];
-      snap.forEach(d => arr.push(d.data()));
-      arr.sort((a, b) => (a.createdAt||0) - (b.createdAt||0));
-
-      out.innerHTML = '';
-      arr.forEach(m => {
-        const div = document.createElement('div');
-        div.style.margin = "6px 0";
-        div.style.whiteSpace = "pre-wrap";
-        div.textContent = `${m.from}: ${m.text}`;
-        out.appendChild(div);
-      });
-      out.scrollTop = out.scrollHeight;
+function startChatListener(username) {
+  const colRef = collection(db, "users", username, "messages");
+  onSnapshot(colRef, snap => {
+    const out = document.getElementById('chatMessages');
+    out.innerHTML = '';
+    let arr = [];
+    snap.forEach(d => arr.push(d.data()));
+    arr.sort((a,b) => a.createdAt - b.createdAt);
+    arr.forEach(m => {
+      const div = document.createElement('div');
+      div.className = 'list-item';
+      div.textContent = `${m.from}: ${m.text}`;
+      out.appendChild(div);
     });
-  }
+    out.scrollTop = out.scrollHeight;
+  });
+}
+let CURRENT_CHAT_USER = null;
 
+function renderUserList() {
+  const colRef = collection(db, "users");
+  onSnapshot(colRef, snap => {
+    const out = document.getElementById('adminUserList');
+    out.innerHTML = '';
+    snap.forEach(d => {
+      const user = d.id;
+      const btn = document.createElement('button');
+      btn.className = 'btn';
+      btn.textContent = user;
+      btn.onclick = () => openAdminChat(user);
+      out.appendChild(btn);
+    });
+  });
+}
+
+function openAdminChat(user) {
+  CURRENT_CHAT_USER = user;
+  document.getElementById('chatWith').textContent = "Chat with " + user;
+  document.getElementById('adminChat').style.display = 'block';
+
+  const colRef = collection(db, "users", user, "messages");
+  onSnapshot(colRef, snap => {
+    const out = document.getElementById('adminChatMessages');
+    out.innerHTML = '';
+    let arr = [];
+    snap.forEach(d => arr.push(d.data()));
+    arr.sort((a,b) => a.createdAt - b.createdAt);
+    arr.forEach(m => {
+      const div = document.createElement('div');
+      div.className = 'list-item';
+      div.textContent = `${m.from}: ${m.text}`;
+      out.appendChild(div);
+    });
+    out.scrollTop = out.scrollHeight;
+  });
+}
+
+async function sendAdminMessage() {
+  if (!CURRENT_CHAT_USER) return;
+  const text = document.getElementById('adminChatInput').value.trim();
+  if (!text) return;
+  const id = Date.now() + "-" + Math.random().toString(36).slice(2, 8);
+
+  await setDoc(doc(db, "users", CURRENT_CHAT_USER, "messages", id), {
+    from: "admin",
+    to: CURRENT_CHAT_USER,
+    text,
+    createdAt: Date.now()
+  });
+
+  document.getElementById('adminChatInput').value = '';
+}
 </script>
 
 
@@ -491,20 +514,15 @@ min-height:80px
       <button id="homeLoginBtn" style="background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(0,0,0,0.06)); border:2px solid rgba(255,255,255,0.85); padding:12px 36px; border-radius:8px; font-size:18px; font-weight:600; cursor:pointer;">
         Login
       </button>
-      <div id="chatBox" style="margin-top:30px; text-align:left;">
-  <h3 style="color:white; font-size:20px; margin-bottom:8px;">💬 Chat with Admin</h3>
-
-  <label style="color:white;">Your Name</label>
-  <input id="chatUsername" type="text" placeholder="Enter your name"
-         style="width:100%; padding:8px; border-radius:6px; margin-bottom:10px;">
-
-  <div id="chatMessages"
-       style="background:rgba(255,255,255,0.15); padding:10px; border-radius:6px; height:160px; overflow-y:auto; color:white; margin-bottom:10px;">
-  </div>
-
-  <textarea id="chatInput" placeholder="Type your message..."
-            style="width:100%; padding:8px; border-radius:6px; min-height:60px; margin-bottom:10px;"></textarea>
-  <button class="btn brand" id="chatSendBtn">Send</button>
+<div id="chatBox" class="card" style="margin-top:20px;">
+  <h3>💬 Chat</h3>
+  <label>Enter your name</label>
+  <input id="chatUsername" type="text" placeholder="Your name">
+  
+  <div id="chatMessages" class="list" style="margin:10px 0; max-height:200px; overflow:auto;"></div>
+  
+  <textarea id="chatInput" placeholder="Type your message..."></textarea>
+  <button class="btn brand" onclick="sendUserMessage()">Send</button>
 </div>
 
       <div style="font-size:13px;opacity:0.9;margin-top:8px">Made by Ranjan Ray.</div>
@@ -634,6 +652,16 @@ min-height:80px
 <!-- add this inside adminPanel, e.g. right after <section id="adminPanel"...> -->
 <div style="margin-bottom:10px;">
   <button class="btn" onclick="showSection('import')">Import / Export (Admin)</button>
+</div>
+<div class="card">
+  <h3>👥 User Chats</h3>
+  <div id="adminUserList" class="list"></div>
+  <div id="adminChat" style="margin-top:10px; display:none;">
+    <h4 id="chatWith"></h4>
+    <div id="adminChatMessages" class="list" style="max-height:200px; overflow:auto;"></div>
+    <textarea id="adminChatInput" placeholder="Type reply..."></textarea>
+    <button class="btn brand" onclick="sendAdminMessage()">Send</button>
+  </div>
 </div>
 
   <!-- Exam Settings Card -->
@@ -3679,6 +3707,7 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 </body>
 </html>
+
 
 
 
