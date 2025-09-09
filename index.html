@@ -113,6 +113,7 @@ function renderAdminAnnouncementsLive(){
   }
 }
 
+
 // Student-side: listen for the latest announcement and update top banner in real-time
 function startAnnouncementsListenerForStudents(){
   try {
@@ -175,6 +176,209 @@ window.clearAnnouncementBox = clearAnnouncementBox;
 window.deleteAnnouncement = deleteAnnouncement;
 window.renderAdminAnnouncementsLive = renderAdminAnnouncementsLive;
 window.startAnnouncementsListenerForStudents = startAnnouncementsListenerForStudents;
+  <!-- paste here: small helpers -->
+
+function escapeHTML(s='') {
+  return String(s).replace(/[&<>"']/g, c=>({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
+}
+function makeId() {
+  return String(Date.now()) + '-' + Math.random().toString(36).slice(2,8);
+}
+// Student -> Admin: send message
+async function sendMessageToAdmin(username, text) {
+  try {
+    const id = makeId();
+    const payload = {
+      id,
+      from: username,
+      to: 'admin',
+      text: String(text).trim(),
+      createdAt: Date.now(),
+      read: false,
+      replied: false,
+      replyToId: null
+    };
+    await setDoc(doc(db, "privateMessages", id), payload);
+    return true;
+  } catch (err) {
+    console.error("sendMessageToAdmin error:", err);
+    return false;
+  }
+}
+
+// Initialize UI for student chat (call after login)
+function initStudentChat(currentUser) {
+  const sendBtn = document.getElementById('studentMsgSend');
+  const input = document.getElementById('studentMsgInput');
+  const status = document.getElementById('studentMsgStatus');
+  if (!sendBtn || !input) return;
+
+  sendBtn.onclick = async () => {
+    const text = (input.value || '').trim();
+    if (!text) { status.textContent = 'Type something first.'; return; }
+    status.textContent = 'Sending…';
+    const ok = await sendMessageToAdmin(currentUser.username, text);
+    if (ok) {
+      input.value = '';
+      status.textContent = 'Sent ✔';
+      setTimeout(()=> status.textContent = '', 2000);
+    } else {
+      status.textContent = 'Send failed (see console).';
+      setTimeout(()=> status.textContent = '', 3000);
+    }
+  };
+
+  // start listening for admin replies to this student
+  startStudentInboxListener(currentUser.username);
+}
+
+let _STUDENT_INBOX_SNAP = null;
+function startStudentInboxListener(username) {
+  if (_STUDENT_INBOX_SNAP) { _STUDENT_INBOX_SNAP(); _STUDENT_INBOX_SNAP = null; }
+  const colRef = collection(db, "privateMessages");
+  _STUDENT_INBOX_SNAP = onSnapshot(colRef, snap => {
+    const replies = [];
+    snap.forEach(d => {
+      const m = d.data();
+      if (!m) return;
+      if (m.to === username && m.from !== username) replies.push({...m, _docId: d.id});
+    });
+    if (replies.length === 0) return;
+    replies.sort((a,b) => (a.createdAt||0) - (b.createdAt||0));
+    const last = replies[replies.length-1];
+    // replace with your toast UI — quick fallback:
+    alert(`Admin: ${last.text}`);
+  });
+}
+// Admin: listen for student -> admin messages, group by student
+let _ADMIN_MESSAGES_SNAP = null;
+function startAdminMessagesListener() {
+  if (_ADMIN_MESSAGES_SNAP) { _ADMIN_MESSAGES_SNAP(); _ADMIN_MESSAGES_SNAP = null; }
+  const colRef = collection(db, "privateMessages");
+  _ADMIN_MESSAGES_SNAP = onSnapshot(colRef, snap => {
+    const arr = [];
+    snap.forEach(d => {
+      const data = d.data();
+      if (!data) return;
+      if (data.to === 'admin') arr.push({...data, _docId:d.id});
+    });
+
+    const byUser = {};
+    arr.forEach(m => {
+      if (!byUser[m.from]) byUser[m.from] = [];
+      byUser[m.from].push(m);
+    });
+
+    const listEl = document.getElementById('adminMsgList');
+    listEl.innerHTML = '';
+    const users = Object.keys(byUser).sort();
+    users.forEach(u => {
+      const msgs = byUser[u].sort((a,b)=> (a.createdAt||0) - (b.createdAt||0));
+      const last = msgs[msgs.length-1];
+      const unread = msgs.filter(x => !x.read).length;
+      const item = document.createElement('div');
+      item.style.cssText = 'padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.03);margin-bottom:8px;display:flex;align-items:center;gap:8px';
+      item.innerHTML = `
+        <div style="flex:1">
+          <div style="font-weight:700">${escapeHTML(u)} ${unread? ('<span style="color:crimson">('+unread+' new)</span>') : ''}</div>
+          <div style="font-size:13px;color:var(--muted);margin-top:4px">${escapeHTML((last.text||'').slice(0,120))}</div>
+        </div>
+        <div>
+          <button class="btn" data-user="${escapeHTML(u)}">Open</button>
+        </div>
+      `;
+      listEl.appendChild(item);
+      item.querySelector('button').onclick = () => openAdminThread(u);
+    });
+
+    if (users.length === 0) listEl.innerHTML = '<div class="small">No messages yet.</div>';
+  });
+}
+
+// Admin: open one student thread and reply
+let _CURRENT_ADMIN_THREAD_SNAPSHOT = null;
+function openAdminThread(username) {
+  const existing = document.getElementById('adminThreadModal');
+  if (existing) existing.remove();
+  if (_CURRENT_ADMIN_THREAD_SNAPSHOT) { _CURRENT_ADMIN_THREAD_SNAPSHOT(); _CURRENT_ADMIN_THREAD_SNAPSHOT = null; }
+
+  const modal = document.createElement('div');
+  modal.id = 'adminThreadModal';
+  modal.style.cssText = 'position:fixed;left:18px;top:18px;width:420px;max-height:80vh;background:var(--panel);border-radius:10px;padding:12px;box-shadow:0 12px 40px rgba(0,0,0,0.6);z-index:20000;overflow:hidden';
+  modal.innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <div style="font-weight:800">Thread — ${escapeHTML(username)}</div>
+      <div style="flex:1"></div>
+      <button id="adminThreadCloseBtn" class="btn">Close</button>
+    </div>
+    <div id="adminThreadMessages" style="height:56vh;overflow:auto;padding:8px;border-radius:8px;background:rgba(255,255,255,0.01);"></div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <input id="adminThreadInput" placeholder="Reply to student..." style="flex:1;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.02);background:transparent;color:var(--text)"/>
+      <button id="adminThreadSend" class="btn brand">Reply</button>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  document.getElementById('adminThreadCloseBtn').onclick = () => modal.remove();
+
+  // render messages
+  function renderMsgs(list) {
+    const container = document.getElementById('adminThreadMessages');
+    list.sort((a,b)=> (a.createdAt||0) - (b.createdAt||0));
+    container.innerHTML = list.map(m => {
+      const side = (m.from === username) ? 'text-align:left' : 'text-align:right';
+      const who = escapeHTML(m.from);
+      const time = new Date(m.createdAt).toLocaleString();
+      return `<div style="${side};margin:6px 0">
+                <div style="font-size:12px;color:var(--muted)">${who} • ${time}</div>
+                <div style="margin-top:4px">${escapeHTML(m.text)}</div>
+              </div>`;
+    }).join('');
+    container.scrollTop = container.scrollHeight;
+  }
+
+  const colRef = collection(db, "privateMessages");
+  _CURRENT_ADMIN_THREAD_SNAPSHOT = onSnapshot(colRef, snap => {
+    const relevant = [];
+    snap.forEach(d => {
+      const m = d.data();
+      if (!m) return;
+      if ((m.from === username && m.to === 'admin') || (m.from === (window.currentAdmin || 'admin') && m.to === username)) relevant.push({...m, _docId:d.id});
+    });
+    renderMsgs(relevant);
+  });
+
+  document.getElementById('adminThreadSend').onclick = async () => {
+    const txt = document.getElementById('adminThreadInput').value;
+    if (!txt || !txt.trim()) return;
+    const ok = await sendAdminReplyToStudent(username, txt);
+    if (ok) document.getElementById('adminThreadInput').value = '';
+  };
+}
+
+async function sendAdminReplyToStudent(studentUsername, text) {
+  try {
+    const id = makeId();
+    const payload = {
+      id,
+      from: window.currentAdmin || 'admin',
+      to: studentUsername,
+      text: String(text).trim(),
+      createdAt: Date.now(),
+      read: false,
+      replied: true,
+      replyToId: null
+    };
+    await setDoc(doc(db, "privateMessages", id), payload);
+    return true;
+  } catch (err) {
+    console.error("sendAdminReplyToStudent error:", err);
+    return false;
+  }
+}
+
+
 </script>
 
 
@@ -416,6 +620,16 @@ min-height:80px
       <button id="homeLoginBtn" style="background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(0,0,0,0.06)); border:2px solid rgba(255,255,255,0.85); padding:12px 36px; border-radius:8px; font-size:18px; font-weight:600; cursor:pointer;">
         Login
       </button>
+    <!-- Student -> Admin chat (paste inside the user/home UI) -->
+<div id="studentChatBox" style="margin-top:12px;">
+  <div style="font-weight:700;margin-bottom:6px">Message to Admin</div>
+  <textarea id="studentMsgInput" rows="3" style="width:100%;padding:8px;border-radius:6px;" placeholder="Type your message to admin..."></textarea>
+  <div style="display:flex;gap:8px;margin-top:8px;">
+    <button id="studentMsgSend" class="btn">Send to Admin</button>
+    <div id="studentMsgStatus" style="align-self:center;color:var(--muted);font-size:13px"></div>
+  </div>
+</div>
+
       <div style="font-size:13px;opacity:0.9;margin-top:8px">Made by Ranjan Ray.</div>
     </div>
   </div>
@@ -543,6 +757,11 @@ min-height:80px
 <!-- add this inside adminPanel, e.g. right after <section id="adminPanel"...> -->
 <div style="margin-bottom:10px;">
   <button class="btn" onclick="showSection('import')">Import / Export (Admin)</button>
+</div>
+<!-- Admin: Student Messages Panel (paste into admin dashboard area) -->
+<div id="adminMessagesPanel" class="card" style="margin-top:16px;">
+  <h3 style="margin:0 0 8px 0">Student Messages</h3>
+  <div id="adminMsgList" style="display:block;gap:8px"></div>
 </div>
 
   <!-- Exam Settings Card -->
@@ -1307,7 +1526,10 @@ async function startExam(user){
   startTimer(); // uses EXAM.state.remainingMs
 await saveSessionToFirestore(user.username, EXAM.state, EXAM.paper);
 startPeriodicSessionSave();
+  // inside startExam(user) near the end, add:
+try { initStudentChat(user); } catch(e) { console.warn('initStudentChat failed', e); }
 }
+
 
 async function loadTimer(username) {
   try {
@@ -2135,7 +2357,27 @@ function enterAdmin(){
   renderUsersAdmin();
   renderResults();
   renderSettingsAdmin();
+
+  // show Admin Messages panel if present (was added by patch)
+  try {
+    const panel = document.getElementById('adminMessagesPanel');
+    if (panel) panel.style.display = ''; // remove display:none so panel is visible
+  } catch (e) {
+    console.warn('adminMessagesPanel not found', e);
+  }
+
+  // start admin messages listener (real-time)
+  try {
+    if (typeof startAdminMessagesListener === 'function') {
+      startAdminMessagesListener();
+    } else {
+      console.warn('startAdminMessagesListener() not found - ensure admin messages JS is loaded');
+    }
+  } catch (e) {
+    console.warn('Failed to startAdminMessagesListener', e);
+  }
 }
+
 
 /* Call this when admin logs out / clicks Back */
 function logoutAdmin() {
@@ -2534,9 +2776,12 @@ const isLocked = !!sess.locked;
 actions.innerHTML = `
   <button class="btn" onclick='adminViewSession("${sess.id}")'>View</button>
   <button class="btn" onclick='adminForceClearSession("${sess.id}")'>Clear</button>
+  <button class="btn" onclick='openAdminThread("${escapeHTML(sess.username || sess.id).replace(/'/g,"\\'")}")'>Chat</button>
   ${isLocked ? `<span class="badge" style="margin-left:8px;background:#f87171;color:white">Locked</span>` : ''}
   ${isLocked ? `<button class="btn brand" onclick='adminUnlockSession("${sess.id}")'>Unlock</button>` : ''}
 `;
+
+
 
     wrapper.appendChild(left);
     wrapper.appendChild(mid);
@@ -2545,6 +2790,7 @@ actions.innerHTML = `
     out.appendChild(wrapper);
   });
 }
+  
 
 // View session detail (simple modal-like alert or console), you can expand to fancy modal
 async function adminViewSession(sessionId) {
@@ -3588,3 +3834,4 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 </body>
 </html>
+
