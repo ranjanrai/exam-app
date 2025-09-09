@@ -22,6 +22,9 @@
   window.db = getFirestore(app);
   window.storage = getStorage(app);
 
+  window.db = db;
+  window.fsc = { collection, doc, setDoc, onSnapshot, getDocs, query, orderBy };
+
   // ✅ Expose Firestore helpers globally
   window.setDoc = setDoc;
   window.getDoc = getDoc;
@@ -175,6 +178,84 @@ window.clearAnnouncementBox = clearAnnouncementBox;
 window.deleteAnnouncement = deleteAnnouncement;
 window.renderAdminAnnouncementsLive = renderAdminAnnouncementsLive;
 window.startAnnouncementsListenerForStudents = startAnnouncementsListenerForStudents;
+  <script type="module">
+  const { collection, doc, setDoc, onSnapshot } = window.fsc;
+  const db = window.db;
+
+  let CHAT_USER = null;
+  let homeChatUnsub = null;
+
+  document.addEventListener('DOMContentLoaded', () => {
+    const sendBtn = document.getElementById('chatSendBtn');
+    const input   = document.getElementById('chatInput');
+
+    if (sendBtn) sendBtn.addEventListener('click', sendUserMessage);
+    if (input) {
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          sendUserMessage();
+        }
+      });
+    }
+  });
+
+  async function ensureChatUser() {
+    if (CHAT_USER) return CHAT_USER;
+    const name = (document.getElementById('chatUsername')?.value || '').trim();
+    if (!name) { alert('Enter your name first'); throw new Error('Missing name'); }
+    CHAT_USER = name;
+
+    await setDoc(doc(db, "users", CHAT_USER), { createdAt: Date.now() }, { merge: true });
+
+    startChatListener(CHAT_USER);
+    return CHAT_USER;
+  }
+
+  async function sendUserMessage() {
+    try {
+      const user = await ensureChatUser();
+      const text = (document.getElementById('chatInput')?.value || '').trim();
+      if (!text) return;
+
+      const id = Date.now() + "-" + Math.random().toString(36).slice(2, 8);
+
+      await setDoc(doc(db, "users", user, "messages", id), {
+        from: user,
+        to: "admin",
+        text,
+        createdAt: Date.now()
+      });
+
+      document.getElementById('chatInput').value = '';
+    } catch(e) {
+      console.error(e);
+    }
+  }
+
+  function startChatListener(username) {
+    if (homeChatUnsub) { homeChatUnsub(); homeChatUnsub = null; }
+
+    const colRef = collection(db, "users", username, "messages");
+    homeChatUnsub = onSnapshot(colRef, (snap) => {
+      const out = document.getElementById('chatMessages');
+      if (!out) return;
+      const arr = [];
+      snap.forEach(d => arr.push(d.data()));
+      arr.sort((a, b) => (a.createdAt||0) - (b.createdAt||0));
+
+      out.innerHTML = '';
+      arr.forEach(m => {
+        const div = document.createElement('div');
+        div.style.margin = "6px 0";
+        div.style.whiteSpace = "pre-wrap";
+        div.textContent = `${m.from}: ${m.text}`;
+        out.appendChild(div);
+      });
+      out.scrollTop = out.scrollHeight;
+    });
+  }
+
 </script>
 
 
@@ -416,6 +497,22 @@ min-height:80px
       <button id="homeLoginBtn" style="background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(0,0,0,0.06)); border:2px solid rgba(255,255,255,0.85); padding:12px 36px; border-radius:8px; font-size:18px; font-weight:600; cursor:pointer;">
         Login
       </button>
+      <div id="chatBox" style="margin-top:30px; text-align:left;">
+  <h3 style="color:white; font-size:20px; margin-bottom:8px;">💬 Chat with Admin</h3>
+
+  <label style="color:white;">Your Name</label>
+  <input id="chatUsername" type="text" placeholder="Enter your name"
+         style="width:100%; padding:8px; border-radius:6px; margin-bottom:10px;">
+
+  <div id="chatMessages"
+       style="background:rgba(255,255,255,0.15); padding:10px; border-radius:6px; height:160px; overflow-y:auto; color:white; margin-bottom:10px;">
+  </div>
+
+  <textarea id="chatInput" placeholder="Type your message..."
+            style="width:100%; padding:8px; border-radius:6px; min-height:60px; margin-bottom:10px;"></textarea>
+  <button class="btn brand" id="chatSendBtn">Send</button>
+</div>
+
       <div style="font-size:13px;opacity:0.9;margin-top:8px">Made by Ranjan Ray.</div>
     </div>
   </div>
@@ -3588,3 +3685,4 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 </body>
 </html>
+
