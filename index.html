@@ -1390,9 +1390,30 @@ async function loadTimer(username) {
 */
 
 // Save session state to Firestore (merge)
+// helper: get public IP (cached so we don't call API every save)
+let cachedIP = null;
+async function getUserIP() {
+  if (cachedIP) return cachedIP;
+  try {
+    const res = await fetch("https://api.ipify.org?format=json");
+    const data = await res.json();
+    cachedIP = data.ip;
+    return cachedIP;
+  } catch (e) {
+    console.warn("⚠️ Failed to fetch IP", e);
+    cachedIP = "unknown";
+    return cachedIP;
+  }
+}
+
 async function saveSessionToFirestore(username, state = null, paper = null) {
   if (!username) return false;
   try {
+    // ✅ Ensure IP is fetched once per user session
+    if (!EXAM.state.ip) {
+      EXAM.state.ip = await getUserIP();
+    }
+
     // Build payload: lightweight snapshot to reconstruct session
     const payload = {
       remainingMs: state?.remainingMs ?? EXAM.state?.remainingMs ?? 0,
@@ -1402,23 +1423,24 @@ async function saveSessionToFirestore(username, state = null, paper = null) {
       paperIds: paper ? paper.map(p => p.id) : (EXAM.paper ? EXAM.paper.map(p => p.id) : []),
       answers: state?.answers ?? EXAM.state?.answers ?? {},
       flags: state?.flags ?? EXAM.state?.flags ?? {},
-      // IMPORTANT: prefer explicit state.locked when provided; otherwise fall back to examPaused
-      locked: (state && state.hasOwnProperty('locked')) ? !!state.locked : !!(typeof examPaused !== 'undefined' && examPaused)
+      locked: (state && state.hasOwnProperty('locked')) 
+                ? !!state.locked 
+                : !!(typeof examPaused !== 'undefined' && examPaused),
+      ip: EXAM.state.ip || "unknown"   // ✅ add IP here
     };
 
-    // OPTIONAL: include who unlocked and when if state indicates unlock metadata
-    // (useful for debugging/admin audit). Only include if provided.
+    // Optional unlock metadata
     if (state?.unlockedBy) payload.unlockedBy = state.unlockedBy;
     if (state?.unlockedAt) payload.unlockedAt = state.unlockedAt;
 
     await setDoc(doc(db, "sessions", username), payload, { merge: true });
-    // console.log("🔁 Session saved for", username, payload);
     return true;
   } catch (err) {
     console.warn("⚠️ Could not save session:", err);
     return false;
   }
 }
+
 
 
 // Increment resume counter atomically (client-side simple approach)
@@ -2542,7 +2564,9 @@ async function renderSessionsAdmin() {
   out.innerHTML = '';
   sessions.forEach(sess => {
     // try to find user details from local users array
-    const user = users.find(u => u.username === sess.id) || users.find(u => u.username === sess.username) || { username: sess.id || sess.username, fullName: sess.username || sess.id, photo: '' };
+    const user = users.find(u => u.username === sess.id) 
+              || users.find(u => u.username === sess.username) 
+              || { username: sess.id || sess.username, fullName: sess.username || sess.id, photo: '' };
 
     const wrapper = document.createElement('div');
     wrapper.className = 'list-item';
@@ -2550,6 +2574,7 @@ async function renderSessionsAdmin() {
     wrapper.style.alignItems = 'center';
     wrapper.style.justifyContent = 'space-between';
 
+    // left: user photo + name
     const left = document.createElement('div');
     left.style.display = 'flex';
     left.style.gap = '10px';
@@ -2562,28 +2587,30 @@ async function renderSessionsAdmin() {
       </div>
     `;
 
+    // middle: exam status + IP
     const mid = document.createElement('div');
     mid.className = 'small';
-    mid.style.minWidth = '180px';
+    mid.style.minWidth = '220px';
     mid.style.textAlign = 'center';
     mid.innerHTML = `
       <div>Remaining: ${msToTime(Number(sess.remainingMs || 0))}</div>
       <div style="margin-top:4px">${sess.startedAt ? new Date(sess.startedAt).toLocaleString() : '-'}</div>
       <div style="margin-top:4px;color:var(--muted)">${formatTimeAgo(sess.updatedAt)}</div>
+      <div style="margin-top:4px">IP: ${sess.ip || 'unknown'}</div>   <!-- ✅ Show IP -->
     `;
 
+    // right: actions
     const actions = document.createElement('div');
     actions.style.display = 'flex';
     actions.style.gap = '8px';
-    // inside renderSessionsAdmin() where you build actions for each sess:
-const isLocked = !!sess.locked;
 
-actions.innerHTML = `
-  <button class="btn" onclick='adminViewSession("${sess.id}")'>View</button>
-  <button class="btn" onclick='adminForceClearSession("${sess.id}")'>Clear</button>
-  ${isLocked ? `<span class="badge" style="margin-left:8px;background:#f87171;color:white">Locked</span>` : ''}
-  ${isLocked ? `<button class="btn brand" onclick='adminUnlockSession("${sess.id}")'>Unlock</button>` : ''}
-`;
+    const isLocked = !!sess.locked;
+    actions.innerHTML = `
+      <button class="btn" onclick='adminViewSession("${sess.id}")'>View</button>
+      <button class="btn" onclick='adminForceClearSession("${sess.id}")'>Clear</button>
+      ${isLocked ? `<span class="badge" style="margin-left:8px;background:#f87171;color:white">Locked</span>` : ''}
+      ${isLocked ? `<button class="btn brand" onclick='adminUnlockSession("${sess.id}")'>Unlock</button>` : ''}
+    `;
 
     wrapper.appendChild(left);
     wrapper.appendChild(mid);
@@ -3631,8 +3658,19 @@ document.addEventListener('DOMContentLoaded', () => {
   // If your HTML uses <button onclick="handleUserLogin()"> and that still fails,
   // make sure this script runs AFTER that button is parsed (that's why DOMContentLoaded).
 });
+async function getUserIP() {
+  try {
+    const res = await fetch("https://api.ipify.org?format=json");
+    const data = await res.json();
+    return data.ip; // e.g. "103.21.44.55"
+  } catch (e) {
+    console.warn("IP fetch failed", e);
+    return "unknown";
+  }
+}
 
 </script>
 </body>
 </html>
+
 
