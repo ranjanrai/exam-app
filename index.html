@@ -4,7 +4,7 @@
 <!-- Firebase SDK -->
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-  import { getFirestore, collection, doc, setDoc, getDocs, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+  import { getFirestore, collection, doc, setDoc, getDocs, getDoc, onSnapshot, deleteDoc, query, where, orderBy } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
   import { getStorage } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
 
   
@@ -3761,38 +3761,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 });
 
-  async function renderVisitorsAdmin() {
-  const out = document.getElementById("adminVisitorsList");
-  out.innerHTML = "<div class='small'>Loading visitors…</div>";
-
-  const snap = await getDocs(collection(db, "visitors"));
-  if (snap.empty) {
-    out.innerHTML = "<div class='small'>No visitors yet.</div>";
-    return;
-  }
-
-  out.innerHTML = "";
-  snap.forEach(docSnap => {
-    const v = docSnap.data();
-    const div = document.createElement("div");
-    div.className = "list-item";
-    div.style.display = "flex";
-    div.style.justifyContent = "space-between";
-
-    div.innerHTML = `
-      <div>
-        <div><b>${v.visitorId}</b></div>
-        <div class="small">IP: ${v.ip || "unknown"}</div>
-        <div class="small">Seen: ${v.lastSeen ? new Date(v.lastSeen).toLocaleTimeString() : "-"}</div>
-      </div>
-      <div>
-        <button class="btn brand" onclick="sendMessageToVisitor('${v.visitorId}')">Message</button>
-      </div>
-    `;
-    out.appendChild(div);
-  });
-}
-// --- Admin: render visitors list and message sender ---
+ // Admin: render Visitors (before login) with View Msgs and Delete
 async function renderVisitorsAdmin() {
   const out = document.getElementById("adminVisitorsList");
   out.innerHTML = "<div class='small'>Loading visitors…</div>";
@@ -3807,6 +3776,8 @@ async function renderVisitorsAdmin() {
     out.innerHTML = "";
     snap.forEach(docSnap => {
       const v = docSnap.data();
+      const vid = v.visitorId || docSnap.id;
+
       const div = document.createElement("div");
       div.className = "list-item";
       div.style.display = "flex";
@@ -3814,40 +3785,51 @@ async function renderVisitorsAdmin() {
       div.style.alignItems = "center";
 
       const left = document.createElement("div");
-left.innerHTML = `
-  <div style="font-weight:700">${escapeHTML(v.visitorId || docSnap.id)}</div>
-  <div class="small">IP: ${escapeHTML(v.ip || "unknown")}</div>
-  <div class="small">Seen: ${v.lastSeen ? new Date(v.lastSeen).toLocaleString() : "-"}</div>
-  <div class="small" style="color:#2563eb">
-    ${v.message ? "Admin → Visitor: " + escapeHTML(v.message) : ""}
-  </div>
-  <div class="small" style="color:#22c55e">
-    ${v.reply ? "Visitor → Admin: " + escapeHTML(v.reply) : ""}
-  </div>
-`;
+      left.innerHTML = `
+        <div style="font-weight:700">${escapeHTML(vid)}</div>
+        <div class="small">IP: ${escapeHTML(v.ip || "unknown")}</div>
+        <div class="small">Seen: ${v.lastSeen ? new Date(v.lastSeen).toLocaleString() : "-"}</div>
+        <div class="small" style="color:#2563eb">${v.message ? "Admin → Visitor: " + escapeHTML(v.message) : ""}</div>
+        <div class="small" style="color:#22c55e">${v.reply ? "Latest Visitor → Admin: " + escapeHTML(v.reply) : ""}</div>
+      `;
 
       const right = document.createElement("div");
       right.style.display = "flex";
       right.style.gap = "8px";
-      // message button (opens prompt)
+
+      // message button (admin -> visitor)
       const msgBtn = document.createElement("button");
       msgBtn.className = "btn brand";
       msgBtn.textContent = "Message";
-      msgBtn.onclick = () => sendMessageToVisitor(v.visitorId || docSnap.id);
+      msgBtn.onclick = () => sendMessageToVisitor(vid);
 
-      // clear message button
+      // view msgs button (open message history for this visitor)
+      const viewBtn = document.createElement("button");
+      viewBtn.className = "btn";
+      viewBtn.textContent = "View Msgs";
+      viewBtn.onclick = () => viewVisitorMessages(vid);
+
+      // delete visitor + their messages
+      const delBtn = document.createElement("button");
+      delBtn.className = "btn danger";
+      delBtn.textContent = "Delete";
+      delBtn.onclick = () => deleteVisitorAndMessages(vid);
+
+      // clear message button (legacy behavior)
       const clearBtn = document.createElement("button");
       clearBtn.className = "btn";
       clearBtn.textContent = "Clear Msg";
       clearBtn.onclick = async () => {
-        if (!confirm("Clear message for " + (v.visitorId || docSnap.id) + "?")) return;
-        await setDoc(doc(db, "visitors", v.visitorId || docSnap.id), { message: "", messageAt: Date.now() }, { merge: true });
+        if (!confirm("Clear message for " + vid + "?")) return;
+        await setDoc(doc(db, "visitors", vid), { message: "", messageAt: Date.now() }, { merge: true });
         alert("Cleared.");
-        renderVisitorsAdmin(); // refresh
+        renderVisitorsAdmin();
       };
 
       right.appendChild(msgBtn);
+      right.appendChild(viewBtn);
       right.appendChild(clearBtn);
+      right.appendChild(delBtn);
 
       div.appendChild(left);
       div.appendChild(right);
@@ -3856,6 +3838,71 @@ left.innerHTML = `
   } catch (err) {
     console.error("renderVisitorsAdmin error", err);
     out.innerHTML = "<div class='small'>Failed to load visitors (see console).</div>";
+  }
+}
+
+// Open a small window and show all messages for a visitor (chronological)
+async function viewVisitorMessages(visitorId) {
+  try {
+    const q = query(collection(db, "visitorMessages"), where("visitorId", "==", visitorId), orderBy("ts", "asc"));
+    const snap = await getDocs(q);
+    const w = window.open("", "_blank", "width=600,height=600");
+    w.document.title = `Messages — ${visitorId}`;
+    w.document.body.style.background = '#071428';
+    w.document.body.style.color = '#e6eef8';
+    w.document.body.style.fontFamily = 'system-ui, sans-serif';
+    const h = w.document.createElement("div");
+    h.style.padding = '12px';
+    h.innerHTML = `<h2>Messages for ${escapeHTML(visitorId)}</h2><div style="margin-bottom:8px;">Total: ${snap.size}</div>`;
+    w.document.body.appendChild(h);
+
+    if (snap.empty) {
+      const p = w.document.createElement("div");
+      p.textContent = "No messages found for this visitor.";
+      w.document.body.appendChild(p);
+      return;
+    }
+
+    snap.forEach(d => {
+      const data = d.data();
+      const card = w.document.createElement("div");
+      card.style.padding = '8px';
+      card.style.border = '1px solid rgba(255,255,255,0.06)';
+      card.style.marginBottom = '8px';
+      card.style.borderRadius = '6px';
+      card.innerHTML = `<div style="font-size:12px;color:#9ca3af">${new Date(data.ts).toLocaleString()} • ${escapeHTML(data.from || '')}</div>
+                        <div style="margin-top:6px;white-space:pre-wrap">${escapeHTML(data.text || '')}</div>`;
+      w.document.body.appendChild(card);
+    });
+  } catch (err) {
+    console.error("viewVisitorMessages error", err);
+    alert("Failed to load messages (see console).");
+  }
+}
+
+// Delete visitor doc and all related visitorMessages docs
+async function deleteVisitorAndMessages(visitorId) {
+  if (!confirm(`Delete visitor "${visitorId}" and ALL their messages? This cannot be undone.`)) return;
+  try {
+    // remove visitor document
+    await deleteDoc(doc(db, "visitors", visitorId));
+
+    // find and delete all messages for visitor
+    const q = query(collection(db, "visitorMessages"), where("visitorId", "==", visitorId));
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+      const deletions = [];
+      snap.forEach(d => {
+        deletions.push(deleteDoc(doc(db, "visitorMessages", d.id)));
+      });
+      await Promise.all(deletions);
+    }
+
+    alert("Deleted visitor and their messages.");
+    renderVisitorsAdmin();
+  } catch (err) {
+    console.error("deleteVisitorAndMessages error", err);
+    alert("Failed to delete (see console).");
   }
 }
 
@@ -3937,19 +3984,34 @@ function showVisitorMessage(msg) {
   if (span) span.textContent = "📢 Admin: " + msg;
   banner.style.display = "flex";
 }
+// Visitor -> Admin: write each visitor message as its own doc in `visitorMessages`
 async function replyToAdmin() {
-  const reply = prompt("Enter your reply to Admin:");
+  const reply = prompt("Enter your reply to Admin (max 1000 chars):");
   if (!reply) return;
   try {
     const visitorId = localStorage.getItem("visitorId");
-    await setDoc(doc(db, "visitors", visitorId), {
-      reply: reply,
-      replyAt: Date.now()
-    }, { merge: true });
-    alert("✅ Reply sent to Admin!");
+    if (!visitorId) return alert("Visitor session not found (visitorId missing).");
+
+    // create a stable id for the message doc
+    const id = `${visitorId}_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
+
+    const payload = {
+      visitorId,
+      text: String(reply).trim().slice(0, 1000),
+      from: "visitor",
+      ts: Date.now()
+    };
+
+    // store in new collection visitorMessages
+    await setDoc(doc(db, "visitorMessages", id), payload);
+
+    // optional: still keep the legacy 'reply' field for quick glance (merge)
+    await setDoc(doc(db, "visitors", visitorId), { reply: payload.text, replyAt: Date.now() }, { merge: true });
+
+    alert("✅ Reply saved (visitor message recorded).");
   } catch (err) {
-    console.error("Reply failed", err);
-    alert("⚠️ Could not send reply.");
+    console.error("replyToAdmin failed", err);
+    alert("⚠️ Could not send reply. See console for details.");
   }
 }
 
@@ -3967,4 +4029,5 @@ function hideVisitorMessage() {
 </script>
 </body>
 </html>
+
 
