@@ -1137,7 +1137,10 @@ function showSection(id){
     renderResults();
   }
 }
-// Wire home buttons to existing flows
+ if (typeof initVisitorSession === "function") {
+    try { initVisitorSession(); } catch(e) { console.warn("initVisitorSession failed", e); }
+  }
+  // Wire home buttons to existing flows
 document.addEventListener('DOMContentLoaded', ()=> {
   // Start the app showing the Home view
   if(typeof showSection === 'function') showSection('home');
@@ -3697,15 +3700,18 @@ async function initVisitorSession() {
   // Start listening for admin messages
   const ref = doc(db, "visitors", visitorId);
   onSnapshot(ref, snap => {
-    if (snap.exists()) {
-      const data = snap.data();
-      if (data.message) {
-        // Show message on home page (or custom UI)
-      showVisitorMessage(data.message);  // ✅ Replace alert()
-      }
+  if (snap.exists()) {
+    const data = snap.data();
+    // show or hide cleanly
+    if (data.message && String(data.message).trim().length > 0) {
+      showVisitorMessage(data.message);
+    } else {
+      hideVisitorMessage();
     }
-  });
-
+  } else {
+    hideVisitorMessage();
+  }
+});
   console.log("👤 Visitor session started:", visitorId, ip);
 }
 
@@ -3746,6 +3752,86 @@ document.addEventListener("DOMContentLoaded", () => {
     out.appendChild(div);
   });
 }
+// --- Admin: render visitors list and message sender ---
+async function renderVisitorsAdmin() {
+  const out = document.getElementById("adminVisitorsList");
+  out.innerHTML = "<div class='small'>Loading visitors…</div>";
+
+  try {
+    const snap = await getDocs(collection(db, "visitors"));
+    if (!snap || snap.empty) {
+      out.innerHTML = "<div class='small'>No visitors yet.</div>";
+      return;
+    }
+
+    out.innerHTML = "";
+    snap.forEach(docSnap => {
+      const v = docSnap.data();
+      const div = document.createElement("div");
+      div.className = "list-item";
+      div.style.display = "flex";
+      div.style.justifyContent = "space-between";
+      div.style.alignItems = "center";
+
+      const left = document.createElement("div");
+      left.innerHTML = `
+        <div style="font-weight:700">${escapeHTML(v.visitorId || docSnap.id)}</div>
+        <div class="small">IP: ${escapeHTML(v.ip || "unknown")}</div>
+        <div class="small">Seen: ${v.lastSeen ? new Date(v.lastSeen).toLocaleString() : "-"}</div>
+      `;
+
+      const right = document.createElement("div");
+      right.style.display = "flex";
+      right.style.gap = "8px";
+      // message button (opens prompt)
+      const msgBtn = document.createElement("button");
+      msgBtn.className = "btn brand";
+      msgBtn.textContent = "Message";
+      msgBtn.onclick = () => sendMessageToVisitor(v.visitorId || docSnap.id);
+
+      // clear message button
+      const clearBtn = document.createElement("button");
+      clearBtn.className = "btn";
+      clearBtn.textContent = "Clear Msg";
+      clearBtn.onclick = async () => {
+        if (!confirm("Clear message for " + (v.visitorId || docSnap.id) + "?")) return;
+        await setDoc(doc(db, "visitors", v.visitorId || docSnap.id), { message: "", messageAt: Date.now() }, { merge: true });
+        alert("Cleared.");
+        renderVisitorsAdmin(); // refresh
+      };
+
+      right.appendChild(msgBtn);
+      right.appendChild(clearBtn);
+
+      div.appendChild(left);
+      div.appendChild(right);
+      out.appendChild(div);
+    });
+  } catch (err) {
+    console.error("renderVisitorsAdmin error", err);
+    out.innerHTML = "<div class='small'>Failed to load visitors (see console).</div>";
+  }
+}
+
+async function sendMessageToVisitor(visitorId) {
+  if (!visitorId) return alert("Invalid visitorId");
+  const msg = prompt("Enter message for " + visitorId + " (max 300 characters):");
+  if (msg === null) return; // cancelled
+  const text = String(msg).trim().slice(0, 300);
+  if (!text) return alert("Message empty.");
+  try {
+    await setDoc(doc(db, "visitors", visitorId), {
+      message: text,
+      messageAt: Date.now()
+    }, { merge: true });
+    alert("✅ Message sent to " + visitorId);
+    // optional: refresh the admin list
+    renderVisitorsAdmin();
+  } catch (err) {
+    console.error("sendMessageToVisitor error", err);
+    alert("Failed to send message (see console).");
+  }
+}
 
   async function sendMessageToVisitor(visitorId) {
   const msg = prompt("Enter message for " + visitorId);
@@ -3756,11 +3842,60 @@ document.addEventListener("DOMContentLoaded", () => {
   }, { merge: true });
   alert("✅ Message sent to " + visitorId);
 }
+// --- Visitor message UI (homepage banner) ---
+function showVisitorMessage(msg) {
+  let banner = document.getElementById("visitorMsg");
+  if (!banner) {
+    banner = document.createElement("div");
+    banner.id = "visitorMsg";
+    banner.style.cssText = `
+      position:fixed;
+      top:0;
+      left:0;
+      width:100%;
+      background:#002b5c;
+      color:#fff;
+      padding:10px 14px;
+      text-align:center;
+      font-weight:700;
+      z-index:99999;
+      box-shadow: 0 6px 18px rgba(2,6,23,0.6);
+    `;
+
+    // optional close button
+    const closeBtn = document.createElement("button");
+    closeBtn.textContent = "✖";
+    closeBtn.style.cssText = "margin-left:12px;background:transparent;border:0;color:#fff;font-weight:700;cursor:pointer";
+    closeBtn.onclick = () => hideVisitorMessage();
+    banner.appendChild(closeBtn);
+
+    // place message text inside span so we can update it
+    const span = document.createElement("span");
+    span.id = "visitorMsgText";
+    span.style.cssText = "margin-right:8px;";
+    // ensure span goes before close button
+    banner.insertBefore(span, closeBtn);
+    document.body.prepend(banner);
+  }
+  const span = document.getElementById("visitorMsgText");
+  if (span) span.textContent = "📢 Admin: " + msg;
+  banner.style.display = "block";
+}
+
+function hideVisitorMessage() {
+  const banner = document.getElementById("visitorMsg");
+  if (!banner) return;
+  banner.style.display = "none";
+  // optional: remove message field locally to avoid re-showing until admin sets again
+  const span = document.getElementById("visitorMsgText");
+  if (span) span.textContent = "";
+}
 
   
 </script>
 </body>
 </html>
+
 
 
 
