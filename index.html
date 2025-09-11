@@ -131,6 +131,46 @@ function _normalizeTs(ts){
   const n = Number(ts);
   return isNaN(n) ? 0 : n;
 }
+// -------- realtime sessions listener -----------
+let SESSIONS_ONSNAP_UNSUB = null;
+
+// Start real-time listener for sessions collection (idempotent)
+function startSessionsRealtimeListener() {
+  try {
+    if (typeof onSnapshot !== 'function' || typeof collection !== 'function' || typeof db === 'undefined') {
+      console.warn('startSessionsRealtimeListener: Firestore helpers not available');
+      return;
+    }
+    if (SESSIONS_ONSNAP_UNSUB) return; // already listening
+
+    const colRef = collection(db, "sessions");
+    SESSIONS_ONSNAP_UNSUB = onSnapshot(colRef, snap => {
+      // simply re-render the admin list when sessions change
+      if (typeof renderSessionsAdmin === 'function') {
+        renderSessionsAdmin().catch(err => console.warn('renderSessionsAdmin error', err));
+      }
+    }, err => {
+      console.warn('sessions onSnapshot error:', err);
+    });
+
+    console.log('✅ Sessions realtime listener started');
+  } catch (err) {
+    console.warn('startSessionsRealtimeListener error:', err);
+  }
+}
+
+// Stop the realtime listener (if any)
+function stopSessionsRealtimeListener() {
+  try {
+    if (SESSIONS_ONSNAP_UNSUB) {
+      SESSIONS_ONSNAP_UNSUB(); // unsubscribe
+      SESSIONS_ONSNAP_UNSUB = null;
+      console.log('✅ Sessions realtime listener stopped');
+    }
+  } catch (err) {
+    console.warn('stopSessionsRealtimeListener error:', err);
+  }
+}
 
 // helper to update home page banner (create minimal animation)
 function updateHomeAnnouncement(msg){
@@ -1459,6 +1499,40 @@ async function saveSessionToFirestore(username, state = null, paper = null) {
   }
 }
 
+// --- heartbeat helpers (paste near other global helpers) ---
+function startSessionHeartbeat(sessionId, intervalMs = 20000) {
+  if (!sessionId) {
+    console.warn('startSessionHeartbeat: no sessionId provided');
+    return () => {};
+  }
+  if (typeof setDoc !== 'function' || typeof doc !== 'function' || typeof db === 'undefined') {
+    console.warn('startSessionHeartbeat: Firestore helpers not available');
+    return () => {};
+  }
+  const key = `hb_${sessionId}`;
+  if (window[key]) return window[key].stop; // already running
+  const writeNow = () => {
+    try {
+      setDoc(doc(db, "sessions", sessionId), { updatedAt: Date.now() }, { merge: true })
+        .catch(()=>{});
+    } catch (err) {}
+  };
+  writeNow();
+  const id = setInterval(writeNow, intervalMs);
+  const stopper = () => {
+    clearInterval(id);
+    try { delete window[key]; } catch(e){}
+  };
+  window[key] = { id, stop: stopper };
+  return stopper;
+}
+
+function stopSessionHeartbeat(sessionId) {
+  const key = `hb_${sessionId}`;
+  if (window[key] && typeof window[key].stop === 'function') {
+    window[key].stop();
+  }
+}
 
 
 // Increment resume counter atomically (client-side simple approach)
@@ -2556,19 +2630,31 @@ function enableAdminSessionsUI(enable = true) {
 
   if (enable) {
     card.style.display = 'block';
+
+    // start realtime listener (preferred) — this will call renderSessionsAdmin() on changes
+    startSessionsRealtimeListener();
+
+    // initial render
     renderSessionsAdmin().catch(err => console.warn('renderSessionsAdmin error', err));
+
+    // keep legacy auto-refresh checkbox behavior as fallback
     const cb = document.getElementById('adminAutoRefreshSessions');
     if (cb && cb.checked && !SESSIONS_AUTO_REFRESH_ID) {
       SESSIONS_AUTO_REFRESH_ID = setInterval(renderSessionsAdmin, 5000);
     }
   } else {
     card.style.display = 'none';
+
+    // stop real-time listener when admin hides the sessions UI
+    stopSessionsRealtimeListener();
+
     if (SESSIONS_AUTO_REFRESH_ID) {
       clearInterval(SESSIONS_AUTO_REFRESH_ID);
       SESSIONS_AUTO_REFRESH_ID = null;
     }
   }
 }
+
 
 // ------------------ Admin: Live sessions viewer ------------------
 
@@ -2782,6 +2868,44 @@ async function renderSessionsAdmin() {
     wrapper.appendChild(actions);
     out.appendChild(wrapper);
   });
+// --- add live-count badge update (paste at end of renderSessionsAdmin) ---
+(function updateLiveCountBadge(sessionsArr) {
+  try {
+    const THRESHOLD_MS = 15 * 1000; // same threshold your UI uses for "live"
+    const now = Date.now();
+    const liveCount = (sessionsArr || []).filter(sess => {
+      // adapt to the timestamp field your sessions docs use:
+      const t = Number(sess.updatedAt || sess.lastSeen || sess.ts || sess.timestamp || 0);
+      return t && (now - t) < THRESHOLD_MS;
+    }).length;
+
+    // Prefer existing header element; if not present, create one.
+    let titleEl = document.querySelector('#adminSessionsCard h3');
+    if (!titleEl) {
+      // try a fallback selector, or create a small header at top of card
+      const card = document.getElementById('adminSessionsCard') || document.getElementById('sessionsArea') || document.body;
+      if (card) {
+        titleEl = card.querySelector('h3');
+        if (!titleEl) {
+          titleEl = document.createElement('h3');
+          titleEl.style.margin = '8px 0';
+          titleEl.textContent = 'Live Sessions — Who is giving exam?';
+          card.insertBefore(titleEl, card.firstChild);
+        }
+      }
+    }
+
+    // set title text with count
+    if (titleEl) {
+      titleEl.textContent = `Live Sessions — Who is giving exam? (${liveCount} live)`;
+      // optionally make the count visually stand out:
+      titleEl.style.fontSize = '16px';
+      titleEl.style.fontWeight = '700';
+    }
+  } catch (e) {
+    console.warn('updateLiveCountBadge error', e);
+  }
+})(sessions); // pass the sessions array used by renderSessionsAdmin
 
   // setup badge refresher (updates Online/Offline based on updatedAt)
   function refreshBadges() {
@@ -4194,6 +4318,7 @@ function hideVisitorMessage() {
 </script>
 </body>
 </html>
+
 
 
 
