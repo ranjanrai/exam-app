@@ -3886,13 +3886,17 @@ async function renderVisitorsAdmin() {
 // Open a small window and show all messages for a visitor (chronological)
 async function viewVisitorMessages(visitorId) {
   try {
-    // use Firestore query to fetch only messages for this visitor, ordered by timestamp
+    // Fetch only by visitorId (no orderBy — avoids needing an index)
     const q = query(
       collection(db, "visitorMessages"),
-      where("visitorId", "==", visitorId),
-      orderBy("ts", "asc")
+      where("visitorId", "==", visitorId)
     );
     const snap = await getDocs(q);
+
+    // Convert to array and sort manually
+    const msgs = [];
+    snap.forEach(d => msgs.push(d.data()));
+    msgs.sort((a, b) => (a.ts || 0) - (b.ts || 0));
 
     const w = window.open("", "_blank", "width=600,height=600");
     w.document.title = `Messages — ${visitorId}`;
@@ -3902,18 +3906,17 @@ async function viewVisitorMessages(visitorId) {
 
     const h = w.document.createElement("div");
     h.style.padding = '12px';
-    h.innerHTML = `<h2>Messages for ${escapeHTML(visitorId)}</h2><div style="margin-bottom:8px;">Total: ${snap.size}</div>`;
+    h.innerHTML = `<h2>Messages for ${escapeHTML(visitorId)}</h2><div style="margin-bottom:8px;">Total: ${msgs.length}</div>`;
     w.document.body.appendChild(h);
 
-    if (snap.empty) {
+    if (msgs.length === 0) {
       const p = w.document.createElement("div");
       p.textContent = "No messages found for this visitor.";
       w.document.body.appendChild(p);
       return;
     }
 
-    snap.forEach(d => {
-      const data = d.data();
+    msgs.forEach(data => {
       const card = w.document.createElement("div");
       card.style.padding = '8px';
       card.style.border = '1px solid rgba(255,255,255,0.06)';
@@ -3928,6 +3931,7 @@ async function viewVisitorMessages(visitorId) {
     alert("Failed to load messages (see console).");
   }
 }
+
 
 
 // Delete visitor doc and all related visitorMessages docs
@@ -4079,6 +4083,7 @@ function hideVisitorMessage() {
 </script>
 </body>
 </html>
+
 
 
 
