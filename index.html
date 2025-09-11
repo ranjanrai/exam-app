@@ -2570,13 +2570,21 @@ async function renderSessionsAdmin() {
     return;
   }
 
+  const now = Date.now();
+  const THRESHOLD = 15000; // 15 seconds
+
   // Build a list UI
   out.innerHTML = '';
   sessions.forEach(sess => {
-    // try to find user details from local users array
     const user = users.find(u => u.username === sess.id) 
               || users.find(u => u.username === sess.username) 
               || { username: sess.id || sess.username, fullName: sess.username || sess.id, photo: '' };
+
+    const lastUpdate = Number(sess.updatedAt || 0);
+    const online = (now - lastUpdate) < THRESHOLD;
+    const statusHTML = online
+      ? `<span style="color:#34d399;font-weight:700">🟢 Online</span>`
+      : `<span style="color:#f87171;font-weight:700">🔴 Offline</span>`;
 
     const wrapper = document.createElement('div');
     wrapper.className = 'list-item';
@@ -2592,7 +2600,7 @@ async function renderSessionsAdmin() {
     left.innerHTML = `
       <img src="${user.photo || ''}" class="userPhoto" style="width:48px;height:48px;border-radius:8px">
       <div>
-        <div style="font-weight:800">${user.fullName || user.username || sess.id}</div>
+        <div style="font-weight:800">${user.fullName || user.username || sess.id} ${statusHTML}</div>
         <div class="small">${sess.username || sess.id} • ${sess.paperIds ? sess.paperIds.length : '-'} q • resumed ${sess.resumes || 0} time(s)</div>
       </div>
     `;
@@ -2606,7 +2614,7 @@ async function renderSessionsAdmin() {
       <div>Remaining: ${msToTime(Number(sess.remainingMs || 0))}</div>
       <div style="margin-top:4px">${sess.startedAt ? new Date(sess.startedAt).toLocaleString() : '-'}</div>
       <div style="margin-top:4px;color:var(--muted)">${formatTimeAgo(sess.updatedAt)}</div>
-      <div style="margin-top:4px">IP: ${sess.ip || 'unknown'}</div>   <!-- ✅ Show IP -->
+      <div style="margin-top:4px">IP: ${sess.ip || 'unknown'}</div>
     `;
 
     // right: actions
@@ -2629,6 +2637,28 @@ async function renderSessionsAdmin() {
     out.appendChild(wrapper);
   });
 }
+// Auto-refresh setup
+let autoRefreshTimer = null;
+function setupAutoRefreshSessions() {
+  const checkbox = document.getElementById("adminAutoRefreshSessions");
+  if (!checkbox) return;
+
+  checkbox.addEventListener("change", () => {
+    if (checkbox.checked) {
+      renderSessionsAdmin(); // refresh immediately
+      autoRefreshTimer = setInterval(renderSessionsAdmin, 5000);
+    } else {
+      if (autoRefreshTimer) {
+        clearInterval(autoRefreshTimer);
+        autoRefreshTimer = null;
+      }
+    }
+  });
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  setupAutoRefreshSessions();
+});
 
 // View session detail (simple modal-like alert or console), you can expand to fancy modal
 async function adminViewSession(sessionId) {
@@ -3934,6 +3964,7 @@ function hideVisitorMessage() {
 </script>
 </body>
 </html>
+
 
 
 
