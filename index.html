@@ -3696,7 +3696,16 @@ async function initVisitorSession() {
     createdAt: Date.now(),
     lastSeen: Date.now()
   }, { merge: true });
-
+// ✅ Update lastSeen every 30s to mark visitor as active
+setInterval(async () => {
+  try {
+    await setDoc(doc(db, "visitors", visitorId), {
+      lastSeen: Date.now()
+    }, { merge: true });
+  } catch (e) {
+    console.warn("⚠️ Could not update lastSeen", e);
+  }
+}, 30_000);
   // Start listening for admin messages
   const ref = doc(db, "visitors", visitorId);
   onSnapshot(ref, snap => {
@@ -3895,6 +3904,7 @@ function hideVisitorMessage() {
 </script>
 </body>
 </html>
+
 
 
 
