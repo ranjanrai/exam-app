@@ -24,12 +24,19 @@
   window.storage = getStorage(app);
 
   // ✅ Expose Firestore helpers globally
+   // ✅ Expose Firestore helpers globally (make sure module-level imports are available to non-module callers)
   window.setDoc = setDoc;
   window.getDoc = getDoc;
   window.getDocs = getDocs;
   window.doc = doc;
   window.collection = collection;
-  window.onSnapshot = onSnapshot;   // ✅ expose this
+  window.onSnapshot = onSnapshot;
+  // Expose query helpers used by admin visitor message UI and delete routines
+  window.deleteDoc = deleteDoc;
+  window.query = query;
+  window.where = where;
+  window.orderBy = orderBy;
+
   /* ------------------------
    Announcements (Admin -> All users)
    ------------------------ */
@@ -4072,6 +4079,7 @@ function hideVisitorMessage() {
 </script>
 </body>
 </html>
+
 
 
 
