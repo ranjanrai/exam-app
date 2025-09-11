@@ -3818,8 +3818,11 @@ left.innerHTML = `
   <div style="font-weight:700">${escapeHTML(v.visitorId || docSnap.id)}</div>
   <div class="small">IP: ${escapeHTML(v.ip || "unknown")}</div>
   <div class="small">Seen: ${v.lastSeen ? new Date(v.lastSeen).toLocaleString() : "-"}</div>
+  <div class="small" style="color:#2563eb">
+    ${v.message ? "Admin → Visitor: " + escapeHTML(v.message) : ""}
+  </div>
   <div class="small" style="color:#22c55e">
-    ${v.reply ? "Reply: " + escapeHTML(v.reply) : ""}
+    ${v.reply ? "Visitor → Admin: " + escapeHTML(v.reply) : ""}
   </div>
 `;
 
@@ -3964,6 +3967,7 @@ function hideVisitorMessage() {
 </script>
 </body>
 </html>
+
 
 
 
