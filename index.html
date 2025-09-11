@@ -2664,12 +2664,14 @@ async function renderSessionsAdmin() {
     actions.style.gap = '8px';
 
     const isLocked = !!sess.locked;
-    actions.innerHTML = `
-      <button class="btn" onclick='adminViewSession("${sess.id}")'>View</button>
-      <button class="btn" onclick='adminForceClearSession("${sess.id}")'>Clear</button>
-      ${isLocked ? `<span class="badge" style="margin-left:8px;background:#f87171;color:white">Locked</span>` : ''}
-      ${isLocked ? `<button class="btn brand" onclick='adminUnlockSession("${sess.id}")'>Unlock</button>` : ''}
-    `;
+    aactions.innerHTML = `
+  <button class="btn" onclick='adminViewSession("${sess.id}")'>View</button>
+  <button class="btn" onclick='adminForceClearSession("${sess.id}")'>Clear</button>
+  <button class="btn danger" onclick='adminDeleteSession("${sess.id}")'>Delete</button>
+  ${isLocked ? `<span class="badge" style="margin-left:8px;background:#f87171;color:white">Locked</span>` : ''}
+  ${isLocked ? `<button class="btn brand" onclick='adminUnlockSession("${sess.id}")'>Unlock</button>` : ''}
+`;
+
 
     wrapper.appendChild(left);
     wrapper.appendChild(mid);
@@ -2737,6 +2739,19 @@ async function adminForceClearSession(sessionId) {
     alert("Failed to clear session (see console).");
   }
 }
+// Permanently delete a saved session doc (admin action)
+async function adminDeleteSession(sessionId) {
+  if (!confirm(`Permanently DELETE session for "${sessionId}"? This cannot be undone.`)) return;
+  try {
+    await deleteDoc(doc(db, "sessions", sessionId));
+    alert("Session deleted.");
+    renderSessionsAdmin();
+  } catch (err) {
+    console.error("adminDeleteSession error:", err);
+    alert("Failed to delete session (see console).");
+  }
+}
+window.adminDeleteSession = adminDeleteSession; // expose globally for inline onclicks
 
 // Clear all sessions (danger)
 async function clearAllSessions() {
@@ -4083,6 +4098,7 @@ function hideVisitorMessage() {
 </script>
 </body>
 </html>
+
 
 
 
