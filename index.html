@@ -2664,7 +2664,7 @@ async function renderSessionsAdmin() {
     actions.style.gap = '8px';
 
     const isLocked = !!sess.locked;
-    aactions.innerHTML = `
+    actions.innerHTML = `
   <button class="btn" onclick='adminViewSession("${sess.id}")'>View</button>
   <button class="btn" onclick='adminForceClearSession("${sess.id}")'>Clear</button>
   <button class="btn danger" onclick='adminDeleteSession("${sess.id}")'>Delete</button>
@@ -4098,6 +4098,7 @@ function hideVisitorMessage() {
 </script>
 </body>
 </html>
+
 
 
 
