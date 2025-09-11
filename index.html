@@ -986,15 +986,26 @@ const download = (filename, content, type='text/plain') => {
   setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
 };
 // Escape HTML to show tags as plain text
-function escapeHTML(str) {
-  return str.replace(/[&<>"']/g, m => ({
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#39;'
-  }[m]));
+// Safe escapeHTML: always coerce input to string before replacing
+function escapeHTML(input) {
+  if (input === null || input === undefined) return '';
+  // If it's an object, stringify it so we don't break; numbers are converted to strings too
+  const str = (typeof input === 'string') ? input : (typeof input === 'object' ? JSON.stringify(input) : String(input));
+  return str.replace(/[&<>"'`=\/]/g, function (s) {
+    return ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;',
+      '/': '&#x2F;',
+      '`': '&#x60;',
+      '=': '&#x3D;'
+    })[s];
+  });
 }
+window.escapeHTML = escapeHTML; // expose globally if other code expects it
+
 // Text encoder/decoder
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -2623,7 +2634,52 @@ async function loadResultsFromFirestore() {
     throw err;
   }
 }
+// Realtime listener helpers for sessions (start/stop)
+let SESSIONS_ONSNAP_UNSUB = null;
 
+function startSessionsRealtimeListener() {
+  try {
+    if (typeof onSnapshot !== 'function' || typeof collection !== 'function' || typeof db === 'undefined') {
+      console.warn('startSessionsRealtimeListener: Firestore helpers not available');
+      return;
+    }
+    if (SESSIONS_ONSNAP_UNSUB) return; // already started
+
+    const colRef = collection(db, "sessions");
+    SESSIONS_ONSNAP_UNSUB = onSnapshot(colRef, snap => {
+      if (typeof renderSessionsAdmin === 'function') {
+        // call but don't block the listener — handle promise errors
+        Promise.resolve().then(() => renderSessionsAdmin()).catch(e => console.warn('renderSessionsAdmin error', e));
+      }
+    }, err => {
+      console.warn('sessions onSnapshot error:', err);
+    });
+
+    console.log('✅ Sessions realtime listener started');
+  } catch (err) {
+    console.warn('startSessionsRealtimeListener error:', err);
+  }
+}
+
+function stopSessionsRealtimeListener() {
+  try {
+    if (SESSIONS_ONSNAP_UNSUB) {
+      SESSIONS_ONSNAP_UNSUB();
+      SESSIONS_ONSNAP_UNSUB = null;
+      console.log('✅ Sessions realtime listener stopped');
+    }
+  } catch (err) {
+    console.warn('stopSessionsRealtimeListener error:', err);
+  }
+}
+
+// Expose to window in case other code calls it via global name
+if (typeof window !== 'undefined') {
+  window.startSessionsRealtimeListener = startSessionsRealtimeListener;
+  window.stopSessionsRealtimeListener = stopSessionsRealtimeListener;
+}
+
+  
 function enableAdminSessionsUI(enable = true) {
   const card = document.getElementById('adminSessionsCard');
   if (!card) return;
@@ -4318,6 +4374,7 @@ function hideVisitorMessage() {
 </script>
 </body>
 </html>
+
 
 
 
