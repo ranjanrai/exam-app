@@ -3701,7 +3701,7 @@ async function initVisitorSession() {
       const data = snap.data();
       if (data.message) {
         // Show message on home page (or custom UI)
-        alert("📢 Admin: " + data.message);
+      showVisitorMessage(data.message);  // ✅ Replace alert()
       }
     }
   });
@@ -3709,7 +3709,11 @@ async function initVisitorSession() {
   console.log("👤 Visitor session started:", visitorId, ip);
 }
 
-document.addEventListener("DOMContentLoaded", initVisitorSession);
+document.addEventListener("DOMContentLoaded", () => {
+  if (typeof initVisitorSession === "function") {
+    initVisitorSession();
+  }
+});
 
   async function renderVisitorsAdmin() {
   const out = document.getElementById("adminVisitorsList");
@@ -3757,6 +3761,7 @@ document.addEventListener("DOMContentLoaded", initVisitorSession);
 </script>
 </body>
 </html>
+
 
 
 
