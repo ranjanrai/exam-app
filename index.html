@@ -70,78 +70,6 @@ async function deleteAnnouncement(id){
   }
 }
 
-  /* ------------------------
-   Visitor Messages (before login)
-   ------------------------ */
-
-// Save visitor message into Firestore
-async function saveVisitorMessage() {
-  const box = document.getElementById("visitorMsgBox");
-  const text = (box.value || "").trim();
-  if (!text) return alert("Enter a message before sending.");
-
-  const id = String(Date.now()) + "-" + Math.random().toString(36).slice(2, 8);
-  const ip = await getUserIP?.() || "unknown"; // reuse helper already in your file
-
-  try {
-    await setDoc(doc(db, "visitors", id), {
-      text,
-      ip,
-      createdAt: Date.now(),
-      deleted: false
-    });
-    box.value = "";
-    alert("✅ Message sent.");
-  } catch (err) {
-    console.error("❌ Failed to save visitor message:", err);
-    alert("Failed to send message.");
-  }
-}
-
-// Admin: render live visitors list
-function renderVisitorsAdmin() {
-  const colRef = collection(db, "visitors");
-  onSnapshot(colRef, snap => {
-    const out = document.getElementById("adminVisitorsList");
-    out.innerHTML = "";
-    const arr = [];
-    snap.forEach(d => arr.push({ id: d.id, ...d.data() }));
-    arr.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-
-    if (arr.length === 0) {
-      out.innerHTML = '<div class="small">No visitors yet.</div>';
-      return;
-    }
-
-    arr.forEach(v => {
-      const row = document.createElement("div");
-      row.className = "list-item";
-      row.innerHTML = `
-        <div style="flex:1">
-          <div><b>${escapeHTML(v.ip || "unknown")}</b>
-          <span style="font-size:12px;color:var(--muted)"> • ${new Date(v.createdAt).toLocaleString()}</span></div>
-          <div style="margin-top:6px">${escapeHTML(v.text || "")}</div>
-          ${v.deleted ? '<div style="color:var(--danger);font-size:12px;margin-top:4px">Deleted</div>' : ''}
-        </div>
-        <div style="margin-left:8px;white-space:nowrap">
-          ${v.deleted ? '' : `<button class="btn danger" onclick="deleteVisitor('${v.id}')">Delete</button>`}
-        </div>
-      `;
-      out.appendChild(row);
-    });
-  });
-}
-
-// Soft-delete visitor message
-async function deleteVisitor(id) {
-  if (!confirm("Delete this visitor message?")) return;
-  await setDoc(doc(db, "visitors", id), { deleted: true, deletedAt: Date.now() }, { merge: true });
-}
-
-// Expose globally
-window.renderVisitorsAdmin = renderVisitorsAdmin;
-window.deleteVisitor = deleteVisitor;
-
 // Admin: render live announcement list (real-time)
 function renderAdminAnnouncementsLive(){
   try {
@@ -538,33 +466,6 @@ min-height:80px
 </div>
       <div style="font-size:13px;opacity:0.9;margin-top:8px">Made by Ranjan Ray.</div>
     </div>
-    <div style="margin-top:22px">
-  <button id="homeLoginBtn" 
-          style="background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(0,0,0,0.06)); border:2px solid rgba(255,255,255,0.85); padding:12px 36px; border-radius:8px; font-size:18px; font-weight:600; cursor:pointer;">
-    Login
-  </button>
-
-  <!-- Announcements -->
-  <div id="homeAnnouncement"
-       style="display:none; z-index:10002; max-width:1100px; margin:12px auto 0; padding:8px 12px;
-              background:#072b4a; color:#fff; text-align:center; border-radius:8px; font-weight:700;">
-  </div>
-
-  <!-- Visitor Chat Box -->
-  <div style="margin-top:24px; text-align:left;">
-    <label for="visitorMsgBox" style="font-weight:600; color:white;">💬 Message (before login)</label>
-    <textarea id="visitorMsgBox" 
-              placeholder="Type your message here..." 
-              style="width:100%; padding:10px; border-radius:6px; margin-top:6px; min-height:60px;"></textarea>
-    <button id="visitorSendBtn" 
-            style="margin-top:8px; padding:8px 16px; border-radius:6px; background:#60a5fa; color:#042033; font-weight:bold; cursor:pointer;">
-      Send
-    </button>
-  </div>
-
-  <div style="font-size:13px;opacity:0.9;margin-top:8px">Made by Ranjan Ray.</div>
-</div>
-
   </div>
 </section>
 <!-- ========== END HOME ========== -->
@@ -1244,10 +1145,6 @@ function showSection(id){
 document.addEventListener('DOMContentLoaded', ()=> {
   // Start the app showing the Home view
   if(typeof showSection === 'function') showSection('home');
-    // Visitor send button
-  const vbtn = document.getElementById("visitorSendBtn");
-  if (vbtn) vbtn.addEventListener("click", saveVisitorMessage);
-
 
   const adminBtn = document.getElementById('homeAdminBtn');
   if(adminBtn) adminBtn.addEventListener('click', ()=> showSection('adminLogin'));
@@ -4070,14 +3967,4 @@ function hideVisitorMessage() {
 </script>
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
 
