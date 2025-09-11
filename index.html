@@ -3784,11 +3784,14 @@ async function renderVisitorsAdmin() {
       div.style.alignItems = "center";
 
       const left = document.createElement("div");
-      left.innerHTML = `
-        <div style="font-weight:700">${escapeHTML(v.visitorId || docSnap.id)}</div>
-        <div class="small">IP: ${escapeHTML(v.ip || "unknown")}</div>
-        <div class="small">Seen: ${v.lastSeen ? new Date(v.lastSeen).toLocaleString() : "-"}</div>
-      `;
+left.innerHTML = `
+  <div style="font-weight:700">${escapeHTML(v.visitorId || docSnap.id)}</div>
+  <div class="small">IP: ${escapeHTML(v.ip || "unknown")}</div>
+  <div class="small">Seen: ${v.lastSeen ? new Date(v.lastSeen).toLocaleString() : "-"}</div>
+  <div class="small" style="color:#22c55e">
+    ${v.reply ? "Reply: " + escapeHTML(v.reply) : ""}
+  </div>
+`;
 
       const right = document.createElement("div");
       right.style.display = "flex";
@@ -3870,27 +3873,53 @@ function showVisitorMessage(msg) {
       font-weight:700;
       z-index:99999;
       box-shadow: 0 6px 18px rgba(2,6,23,0.6);
+      display:flex;
+      justify-content:center;
+      align-items:center;
+      gap:12px;
     `;
 
-    // optional close button
+    // span for message text
+    const span = document.createElement("span");
+    span.id = "visitorMsgText";
+    banner.appendChild(span);
+
+    // reply button
+    const replyBtn = document.createElement("button");
+    replyBtn.textContent = "Reply";
+    replyBtn.style.cssText = "padding:4px 10px;border:0;background:#facc15;color:#000;font-weight:700;cursor:pointer;border-radius:4px";
+    replyBtn.onclick = () => replyToAdmin();
+    banner.appendChild(replyBtn);
+
+    // close button
     const closeBtn = document.createElement("button");
     closeBtn.textContent = "✖";
-    closeBtn.style.cssText = "margin-left:12px;background:transparent;border:0;color:#fff;font-weight:700;cursor:pointer";
+    closeBtn.style.cssText = "padding:4px 8px;background:transparent;border:0;color:#fff;font-weight:700;cursor:pointer";
     closeBtn.onclick = () => hideVisitorMessage();
     banner.appendChild(closeBtn);
 
-    // place message text inside span so we can update it
-    const span = document.createElement("span");
-    span.id = "visitorMsgText";
-    span.style.cssText = "margin-right:8px;";
-    // ensure span goes before close button
-    banner.insertBefore(span, closeBtn);
     document.body.prepend(banner);
   }
   const span = document.getElementById("visitorMsgText");
   if (span) span.textContent = "📢 Admin: " + msg;
-  banner.style.display = "block";
+  banner.style.display = "flex";
 }
+async function replyToAdmin() {
+  const reply = prompt("Enter your reply to Admin:");
+  if (!reply) return;
+  try {
+    const visitorId = localStorage.getItem("visitorId");
+    await setDoc(doc(db, "visitors", visitorId), {
+      reply: reply,
+      replyAt: Date.now()
+    }, { merge: true });
+    alert("✅ Reply sent to Admin!");
+  } catch (err) {
+    console.error("Reply failed", err);
+    alert("⚠️ Could not send reply.");
+  }
+}
+
 
 function hideVisitorMessage() {
   const banner = document.getElementById("visitorMsg");
@@ -3905,6 +3934,7 @@ function hideVisitorMessage() {
 </script>
 </body>
 </html>
+
 
 
 
