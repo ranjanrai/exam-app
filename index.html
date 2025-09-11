@@ -773,7 +773,13 @@ min-height:80px
     <div class="small">No announcements yet.</div>
   </div>
 </div>
-
+<div class="card" id="adminVisitorsCard" style="margin-top:12px;">
+  <h3>Visitors (before login)</h3>
+  <button class="btn" onclick="renderVisitorsAdmin()">Refresh</button>
+  <div id="adminVisitorsList" class="list" style="margin-top:10px; max-height:260px; overflow:auto">
+    <div class="small">No visitors yet.</div>
+  </div>
+</div>
 </section>
 <!-- Live Sessions (Admin) -->
 <div class="card" id="adminSessionsCard" style="margin-top:12px; display:none">
@@ -3658,19 +3664,99 @@ document.addEventListener('DOMContentLoaded', () => {
   // If your HTML uses <button onclick="handleUserLogin()"> and that still fails,
   // make sure this script runs AFTER that button is parsed (that's why DOMContentLoaded).
 });
+// Helper: fetch public IP once
 async function getUserIP() {
   try {
     const res = await fetch("https://api.ipify.org?format=json");
     const data = await res.json();
-    return data.ip; // e.g. "103.21.44.55"
+    return data.ip;
   } catch (e) {
-    console.warn("IP fetch failed", e);
+    console.warn("⚠️ IP fetch failed", e);
     return "unknown";
   }
 }
 
+// Setup visitor session
+async function initVisitorSession() {
+  let visitorId = localStorage.getItem("visitorId");
+  if (!visitorId) {
+    visitorId = "v_" + Math.random().toString(36).slice(2,9);
+    localStorage.setItem("visitorId", visitorId);
+  }
+
+  const ip = await getUserIP();
+
+  // Save/update visitor record in Firestore
+  await setDoc(doc(db, "visitors", visitorId), {
+    ip,
+    visitorId,
+    createdAt: Date.now(),
+    lastSeen: Date.now()
+  }, { merge: true });
+
+  // Start listening for admin messages
+  const ref = doc(db, "visitors", visitorId);
+  onSnapshot(ref, snap => {
+    if (snap.exists()) {
+      const data = snap.data();
+      if (data.message) {
+        // Show message on home page (or custom UI)
+        alert("📢 Admin: " + data.message);
+      }
+    }
+  });
+
+  console.log("👤 Visitor session started:", visitorId, ip);
+}
+
+document.addEventListener("DOMContentLoaded", initVisitorSession);
+
+  async function renderVisitorsAdmin() {
+  const out = document.getElementById("adminVisitorsList");
+  out.innerHTML = "<div class='small'>Loading visitors…</div>";
+
+  const snap = await getDocs(collection(db, "visitors"));
+  if (snap.empty) {
+    out.innerHTML = "<div class='small'>No visitors yet.</div>";
+    return;
+  }
+
+  out.innerHTML = "";
+  snap.forEach(docSnap => {
+    const v = docSnap.data();
+    const div = document.createElement("div");
+    div.className = "list-item";
+    div.style.display = "flex";
+    div.style.justifyContent = "space-between";
+
+    div.innerHTML = `
+      <div>
+        <div><b>${v.visitorId}</b></div>
+        <div class="small">IP: ${v.ip || "unknown"}</div>
+        <div class="small">Seen: ${v.lastSeen ? new Date(v.lastSeen).toLocaleTimeString() : "-"}</div>
+      </div>
+      <div>
+        <button class="btn brand" onclick="sendMessageToVisitor('${v.visitorId}')">Message</button>
+      </div>
+    `;
+    out.appendChild(div);
+  });
+}
+
+  async function sendMessageToVisitor(visitorId) {
+  const msg = prompt("Enter message for " + visitorId);
+  if (!msg) return;
+  await setDoc(doc(db, "visitors", visitorId), {
+    message: msg,
+    messageAt: Date.now()
+  }, { merge: true });
+  alert("✅ Message sent to " + visitorId);
+}
+
+  
 </script>
 </body>
 </html>
+
 
 
