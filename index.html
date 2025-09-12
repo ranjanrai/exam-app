@@ -172,118 +172,22 @@ function stopSessionsRealtimeListener() {
   }
 }
 
-/* ------------------ Enhanced home announcement helpers ------------------ */
-
-// persist seen announcements
-function markAnnouncementSeen(id) {
-  try {
-    const seen = JSON.parse(localStorage.getItem('seenAnnouncements') || '[]');
-    if (!seen.includes(id)) { seen.push(id); localStorage.setItem('seenAnnouncements', JSON.stringify(seen)); }
-  } catch(e){}
-}
-function isAnnouncementSeen(id) {
-  try {
-    const seen = JSON.parse(localStorage.getItem('seenAnnouncements') || '[]');
-    return seen.includes(id);
-  } catch(e){ return false; }
-}
-
-// small auditory cue (opt-in)
-function playBell() {
-  try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const o = ctx.createOscillator();
-    const g = ctx.createGain();
-    o.connect(g); g.connect(ctx.destination);
-    o.type = 'sine'; o.frequency.value = 880;
-    g.gain.value = 0.02;
-    o.start();
-    setTimeout(()=> { o.stop(); ctx.close(); }, 160);
-  } catch(e){ /* ignore */ }
-}
-
-/*
-  updateHomeAnnouncement(msg, opts)
-  opts = {
-    id: (string) unique id from Firestore,
-    persist: (bool) persist seen state in localStorage,
-    variant: 'info'|'warn'|'urgent',
-    cta: { label: 'View rules', href: '...' },
-    tickerThreshold: (number) show marquee if text length > threshold
-  }
-*/
-function updateHomeAnnouncement(msg, opts = {}) {
+// helper to update home page banner (create minimal animation)
+function updateHomeAnnouncement(msg){
   const el = document.getElementById('homeAnnouncement');
-  const inner = document.getElementById('homeAnnInner');
-  const content = document.getElementById('homeAnnContent');
-  const closeBtn = document.getElementById('homeAnnClose');
-  if(!el || !inner || !content || !closeBtn) return;
-
-  const id = opts.id || String(msg || '').slice(0,120);
-
-  // hide if nothing to show or already dismissed and persist requested
-  if(!msg) { el.style.opacity = '0'; setTimeout(()=> el.style.display = 'none', 260); return; }
-  if(opts.persist && isAnnouncementSeen(id)) { el.style.display = 'none'; return; }
-
-  // set variant class
-  el.classList.remove('variant-info','variant-warn','variant-urgent');
-  if(opts.variant === 'warn') el.classList.add('variant-warn');
-  else if(opts.variant === 'urgent') el.classList.add('variant-urgent');
-  else el.classList.add('variant-info');
-
-  // decide ticker or normal
-  const raw = String(msg);
-  const tickerThreshold = opts.tickerThreshold || 90;
-  if(raw.length > tickerThreshold) {
-    content.innerHTML = `<span class="home-ticker"><span class="inner">${escapeHTML(raw)}&nbsp;&nbsp;&nbsp;•&nbsp;&nbsp;&nbsp;${escapeHTML(raw)}</span></span>`;
-  } else {
-    content.textContent = raw;
-  }
-
-  // CTA handling
-  // remove any old CTA
-  const oldCTA = document.getElementById('homeAnnCTA');
-  if(oldCTA) oldCTA.remove();
-  if(opts.cta && opts.cta.label) {
-    const btn = document.createElement('button');
-    btn.id = 'homeAnnCTA';
-    btn.className = 'btn brand';
-    btn.style.marginLeft = '10px';
-    btn.textContent = opts.cta.label;
-    btn.onclick = ()=> { if(opts.cta.href) window.open(opts.cta.href, '_blank'); };
-    inner.appendChild(btn);
-  }
-
-  // show & animate
-  el.style.display = 'block';
-  el.style.opacity = '0';
-  el.style.transform = 'translateY(-8px) scale(0.995)';
-  // allow browser to paint then animate
-  requestAnimationFrame(()=> {
-    el.style.transition = 'transform 260ms cubic-bezier(.22,.9,.36,1), opacity 220ms ease';
-    el.style.transform = 'translateY(0) scale(1)';
+  if(!el) return;
+  if(msg && msg.length){
+    el.textContent = msg;
+    el.style.display = 'block';
+    el.style.transition = 'transform 220ms ease, background 300ms ease, opacity 220ms ease';
+    el.style.transform = 'scale(1.01)';
     el.style.opacity = '1';
-  });
-
-  // wire close button - replace handler to avoid duplicates
-  closeBtn.onclick = () => {
+    setTimeout(()=> el.style.transform = 'scale(1)', 220);
+  } else {
     el.style.opacity = '0';
-    el.style.transform = 'translateY(-8px) scale(0.995)';
-    setTimeout(()=> { el.style.display = 'none'; }, 260);
-    if(opts.persist) markAnnouncementSeen(id);
-    // record dismissal to Firestore if you want (admin analytics)
-    if(typeof recordAnnouncementDismissal === 'function') recordAnnouncementDismissal(id);
-  };
-
-  // optional urgent sound
-  if(opts.variant === 'urgent') {
-    try { if(localStorage.getItem('allowSound') === '1') playBell(); } catch(e){}
+    setTimeout(()=> { if(el) el.style.display = 'none'; }, 240);
   }
-
-  // impression analytics hook
-  if(typeof recordAnnouncementImpression === 'function') recordAnnouncementImpression(id);
 }
-
 
 function startAnnouncementsListenerForStudents(){
   try {
@@ -302,10 +206,11 @@ function startAnnouncementsListenerForStudents(){
       });
 
       if(latest && latest.text) {
-        // update the small exam banner as before
+        // Update existing top banner text
         const banner = document.getElementById('examMsg');
         if(banner) {
           banner.textContent = latest.text;
+          // small pulse animation: briefly change background to highlight
           banner.style.transition = 'background 300ms ease';
           banner.style.background = '#1f2937';
           setTimeout(()=> banner.style.background = '', 800);
@@ -318,15 +223,10 @@ function startAnnouncementsListenerForStudents(){
           }
         }
 
-        // Use enhanced update with options (id, persist state, priority/variant, optional CTA, ticker)
-        updateHomeAnnouncement(latest.text, {
-          id: latest.id || String(latest.createdAt || Date.now()),
-          persist: true,                       // remember if dismissed (localStorage)
-          variant: latest.priority || 'info',  // allow admin to set 'info'|'warn'|'urgent'
-          cta: latest.cta || null,             // optional { label: 'View', href: '...' }
-          tickerThreshold: 80
-        });
+        // Also update the home/sign-in banner (if present)
+        updateHomeAnnouncement(latest.text);
       } else {
+        // No valid latest announcement found — hide home banner if present
         updateHomeAnnouncement('');
       }
     });
@@ -334,7 +234,6 @@ function startAnnouncementsListenerForStudents(){
     console.warn('startAnnouncementsListenerForStudents error:', err);
   }
 }
-
 
 
 // small helper used in fallback (if present in your file)
@@ -414,21 +313,9 @@ position: fixed;     /* stick to top */
 }
 
 #examMsg {
-  display: block;              /* use full width */
+  display: inline-block;
   font-size: 16px;
   animation: colorChange 3s infinite alternate;
-  white-space: normal;         /* allow wrapping */
-  word-break: break-word;      /* break long words if needed */
-  text-align: center;          /* center-align text */
-  line-height: 1.4;            /* give space between lines */
-}
-@media (max-width: 600px) {
-  #examMsg {
-    display: block;
-    white-space: normal;
-    word-break: break-word;
-    font-size: 14px;   /* slightly smaller on very small screens */
-  }
 }
 
 @keyframes colorChange {
@@ -437,78 +324,6 @@ position: fixed;     /* stick to top */
   50%  { color: #03a9f4; }  /* blue */
   75%  { color: #e91e63; }  /* pink */
   100% { color: #ff5722; }  /* orange */
-}
-/* ====== Home announcement enhancements - add here ====== */
-#homeAnnouncement {
-  position: relative;
-  display:none;
-  z-index:10002;
-  max-width:1100px;
-  margin:12px auto 0;
-  padding:10px 16px;
-  background:linear-gradient(90deg,#0d4b7c,#1365a8);
-  color:#fff;
-  text-align:center;
-  border-radius:8px;
-  font-weight:700;
-  box-shadow:0 10px 30px rgba(2,6,23,0.45);
-  transform-origin: top center;
-  transition: transform 260ms ease, opacity 240ms ease;
-}
-
-/* inner layout */
-#homeAnnInner { display:flex; align-items:center; justify-content:center; gap:12px; max-width:95%; margin:0 auto; overflow:hidden; }
-
-/* close button */
-#homeAnnClose {
-  position:absolute;
-  right:8px;
-  top:6px;
-  background:transparent;
-  border:0;
-  color:rgba(255,255,255,0.9);
-  font-weight:700;
-  font-size:16px;
-  cursor:pointer;
-  padding:6px;
-}
-
-/* CTA button inside announcement (small) */
-#homeAnnCTA { padding:6px 10px; border-radius:8px; border:0; font-weight:800; cursor:pointer; }
-
-/* priority variants */
-#homeAnnouncement.variant-info { background:linear-gradient(90deg,#0d4b7c,#1365a8); }
-#homeAnnouncement.variant-warn { background:linear-gradient(90deg,#b45309,#f59e0b); color:#042033; }
-#homeAnnouncement.variant-urgent { background:linear-gradient(90deg,#991b1b,#ef4444); }
-
-/* ticker for long messages */
-.home-ticker { overflow:hidden; white-space:nowrap; width:80%; margin:0 auto; }
-.home-ticker .inner { display:inline-block; padding-left:100%; animation: marquee 12s linear infinite; }
-@keyframes marquee { 0% { transform: translateX(0%); } 100% { transform: translateX(-100%); } }
-
-/* respect reduced motion */
-@media (prefers-reduced-motion: reduce) {
-  #homeAnnouncement, #homeAnnCTA, #homeAnnClose { transition: none !important; animation: none !important; }
-}
-  /* Quick mobile-friendly announcement tweaks */
-#homeAnnouncement #homeAnnContent {
-  display: inline-block;
-  max-width: 86%;
-  white-space: normal;            /* allow wrapping instead of truncation */
-  overflow: visible;              /* show full text */
-  text-overflow: clip;            /* no ellipsis */
-  word-break: break-word;         /* break long words/URLs */
-  line-height: 1.25;
-  font-size: 15px;                /* slightly smaller on mobile */
-}
-
-/* make sure CTA or close button don't overlap on tiny screens */
-@media (max-width: 520px) {
-  #homeAnnouncement { padding: 10px 12px; }
-  #homeAnnInner { gap: 8px; align-items: center; flex-direction: column; }
-  #homeAnnContent { max-width: 100%; font-size: 14px; text-align: center; }
-  #homeAnnCTA { width: 100%; margin-top: 8px; }
-  #homeAnnClose { right: 6px; top: 6px; }
 }
 #examInner {
   margin-top: 40px;
@@ -693,14 +508,10 @@ min-height:80px
         Login
       </button>
       <!-- paste inside <section id="home"> somewhere near the top -->
-<div id="homeAnnouncement" role="region" aria-live="polite" aria-atomic="true" class="variant-info" style="display:none;">
-  <div id="homeAnnInner">
-    <!-- message will be inserted here -->
-    <span id="homeAnnContent" style="display:inline-block;max-width:86%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></span>
-  </div>
-  <button id="homeAnnClose" aria-label="Dismiss announcement">✕</button>
+<div id="homeAnnouncement"
+     style="display:none; z-index:10002; max-width:1100px; margin:12px auto 0; padding:8px 12px;
+            background:#072b4a; color:#fff; text-align:center; border-radius:8px; font-weight:700;">
 </div>
-
       <div style="font-size:13px;opacity:0.9;margin-top:8px">Made by Ranjan Ray.</div>
     </div>
   </div>
@@ -4557,30 +4368,7 @@ function hideVisitorMessage() {
   // optional: remove message field locally to avoid re-showing until admin sets again
   const span = document.getElementById("visitorMsgText");
   if (span) span.textContent = "";
-}
-async function recordAnnouncementImpression(id){
-  if(!id) return;
-  try { await setDoc(doc(db,'annStats',id), { impressions: (Date.now()) }, { merge: true }); } catch(e){ console.warn(e); }
-}
-async function recordAnnouncementDismissal(id){
-  if(!id) return;
-  try { await setDoc(doc(db,'annStats',id), { dismissals: (Date.now()) }, { merge: true }); } catch(e){ console.warn(e); }
-}
-
-  
+}  
 </script>
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
-
-
-
