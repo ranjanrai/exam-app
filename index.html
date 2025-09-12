@@ -414,15 +414,22 @@ position: fixed;     /* stick to top */
 }
 
 #examMsg {
-  display: block;              /* allow full width on small screens */
+  display: block;              /* use full width */
   font-size: 16px;
   animation: colorChange 3s infinite alternate;
-  white-space: normal;         /* wrap text instead of one line only */
-  word-break: break-word;      /* break long words/URLs if needed */
-  text-align: center;          /* keep text centered */
-  line-height: 1.3;
+  white-space: normal;         /* allow wrapping */
+  word-break: break-word;      /* break long words if needed */
+  text-align: center;          /* center-align text */
+  line-height: 1.4;            /* give space between lines */
 }
-
+@media (max-width: 600px) {
+  #examMsg {
+    display: block;
+    white-space: normal;
+    word-break: break-word;
+    font-size: 14px;   /* slightly smaller on very small screens */
+  }
+}
 
 @keyframes colorChange {
   0%   { color: #ffeb3b; }  /* yellow */
@@ -4564,6 +4571,7 @@ async function recordAnnouncementDismissal(id){
 </script>
 </body>
 </html>
+
 
 
 
