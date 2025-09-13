@@ -21,9 +21,11 @@ import { getFirestore, collection, doc, setDoc, getDocs, getDoc, onSnapshot, del
     measurementId: "G-BCFKVMVTBE"
   };
 
-  const app = initializeApp(firebaseConfig);
-  window.db = getFirestore(app);
-  window.storage = getStorage(app);
+const app = initializeApp(firebaseConfig);
+console.log('Firebase initialized:', !!app);
+window.db = getFirestore(app);
+console.log('Firestore exposed as window.db:', !!window.db);
+window.storage = getStorage(app);
 
   // ✅ Expose Firestore helpers globally
    // ✅ Expose Firestore helpers globally (make sure module-level imports are available to non-module callers)
@@ -4690,6 +4692,7 @@ function hideVisitorMessage() {
 </script>
 </body>
 </html>
+
 
 
 
