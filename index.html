@@ -37,6 +37,235 @@
   window.where = where;
   window.orderBy = orderBy;
 
+  
+/* -------------------------
+   Simple Screen Sharing (WebRTC + Firestore signaling)
+   - Student calls toggleScreenShare()
+   - Admin uses adminViewScreen(username) to view
+   ------------------------- */
+
+let localScreenStream = null;
+let pcScreenShare = null;
+let pcViewer = null;
+let screenShareDocRef = null;
+let screenOfferUnsub = null;
+let screenOfferCandidatesUnsub = null;
+let screenAnswerCandidatesUnsub = null;
+
+// Utility: create RTCPeerConnection with default handlers
+function makePeerConnection(onTrack, onIceCandidate) {
+  const pc = new RTCPeerConnection({
+    iceServers: [{ urls: ["stun:stun.l.google.com:19302"] }]
+  });
+  if (onTrack) pc.ontrack = onTrack;
+  pc.onicecandidate = (e) => {
+    if (e.candidate && typeof onIceCandidate === 'function') onIceCandidate(e.candidate);
+  };
+  return pc;
+}
+
+/* ---------------- Student: start / stop ---------------- */
+async function startScreenShare() {
+  try {
+    if (!EXAM?.state?.username) {
+      alert("Start exam / login first.");
+      return;
+    }
+    const username = EXAM.state.username;
+    // ask for screen capture
+    localScreenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+    // show local preview (optional) — attach to a small video element if you want.
+
+    // prepare Firestore doc
+    screenShareDocRef = doc(db, "screenshares", username);
+    await setDoc(screenShareDocRef, { username, createdAt: Date.now(), status: 'offering' });
+
+    // create peer connection and add track
+    pcScreenShare = makePeerConnection(null, async (candidate) => {
+      // save candidate into offerCandidates subcollection
+      try {
+        const col = collection(db, `screenshares/${username}/offerCandidates`);
+        await addDoc(col, JSON.parse(JSON.stringify(candidate)));
+      } catch (e) { console.warn("offer candidate save failed", e); }
+    });
+
+    // add tracks
+    localScreenStream.getTracks().forEach(track => pcScreenShare.addTrack(track, localScreenStream));
+
+    // create offer
+    const offer = await pcScreenShare.createOffer();
+    await pcScreenShare.setLocalDescription(offer);
+
+    // persist offer to Firestore
+    await setDoc(screenShareDocRef, { username, offer: { type: offer.type, sdp: offer.sdp }, createdAt: Date.now(), status: 'offered' }, { merge: true });
+
+    // listen for answer
+    screenOfferUnsub = onSnapshot(screenShareDocRef, async (snap) => {
+      const data = snap.data();
+      if (!data) return;
+      if (data.answer && !pcScreenShare.currentRemoteDescription) {
+        const answerDesc = new RTCSessionDescription(data.answer);
+        await pcScreenShare.setRemoteDescription(answerDesc);
+        console.log("Screen share: remote answer set");
+      }
+    });
+
+    // also listen for remote (answer) ICE candidates
+    const answerCandsCol = collection(db, `screenshares/${username}/answerCandidates`);
+    screenAnswerCandidatesUnsub = onSnapshot(answerCandsCol, (snap) => {
+      snap.docChanges().forEach(async ch => {
+        if (ch.type === 'added') {
+          const cand = ch.doc.data();
+          try { await pcScreenShare.addIceCandidate(new RTCIceCandidate(cand)); } catch(e){ console.warn("addIceCandidate failed", e); }
+        }
+      });
+    });
+
+    // disable page leaving while sharing? optional
+    document.getElementById('screenShareBtn').textContent = "⛔ Stop Screen Share";
+    document.getElementById('screenShareBtn').style.background = '#f87171';
+
+    // when local track ends (user stops via browser), cleanup
+    localScreenStream.getTracks().forEach(t => t.onended = () => { stopScreenShare(); });
+
+    console.log("Screen share offering started for", username);
+    // set Firestore status flag
+    await setDoc(screenShareDocRef, { status: 'offering', updatedAt: Date.now() }, { merge: true });
+
+  } catch (err) {
+    console.error("startScreenShare error", err);
+    alert("Could not start screen share: " + (err.message || err));
+    stopScreenShare();
+  }
+}
+
+async function stopScreenShare() {
+  try {
+    // stop tracks
+    if (localScreenStream) {
+      localScreenStream.getTracks().forEach(t => { try{ t.stop(); }catch(e){} });
+      localScreenStream = null;
+    }
+    // close pc
+    if (pcScreenShare) {
+      try { pcScreenShare.close(); } catch(e) {}
+      pcScreenShare = null;
+    }
+    // unsubscribe listeners
+    if (screenOfferUnsub) { screenOfferUnsub(); screenOfferUnsub = null; }
+    if (screenAnswerCandidatesUnsub) { screenAnswerCandidatesUnsub(); screenAnswerCandidatesUnsub = null; }
+    if (screenOfferCandidatesUnsub) { screenOfferCandidatesUnsub(); screenOfferCandidatesUnsub = null; }
+
+    // update Firestore doc status
+    if (screenShareDocRef) {
+      try { await setDoc(screenShareDocRef, { status: 'stopped', stoppedAt: Date.now() }, { merge: true }); } catch(e){ console.warn(e); }
+      screenShareDocRef = null;
+    }
+
+    // update UI
+    const btn = document.getElementById('screenShareBtn');
+    if (btn) { btn.textContent = "📺 Start Screen Share"; btn.style.background = ''; }
+
+    console.log("Screen share stopped");
+  } catch (e) {
+    console.warn("stopScreenShare error", e);
+  }
+}
+
+function toggleScreenShare() {
+  if (localScreenStream) stopScreenShare(); else startScreenShare();
+}
+
+// expose for debugging
+window.startScreenShare = startScreenShare;
+window.stopScreenShare = stopScreenShare;
+window.toggleScreenShare = toggleScreenShare;
+
+/* ---------------- Admin: view a student's screen ----------------
+   Call adminViewScreen(username) from admin sessions UI.
+   It will:
+   - read screenshares/{username}.offer
+   - create a pc, setRemoteDescription(offer)
+   - createAnswer -> set to Firestore
+   - exchange ICE candidates
+-------------------------------------------------------------- */
+
+async function adminViewScreen(username) {
+  try {
+    if (!username) return alert("No username provided.");
+    // open a viewer modal (basic)
+    const modalId = 'screenViewerModal';
+    let modal = document.getElementById(modalId);
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = modalId;
+      modal.style = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;z-index:20000;';
+      modal.innerHTML = `
+        <div style="width:80%;max-width:1200px;height:70%;background:#071428;border-radius:8px;padding:8px;position:relative;display:flex;flex-direction:column;">
+          <button style="position:absolute;right:12px;top:8px;padding:6px 8px;" onclick="(function(){ document.getElementById('${modalId}').remove(); if(window.pcViewer){ pcViewer.close(); pcViewer=null; } })()">Close</button>
+          <h3 style="margin:6px 12px;color:#fff">${escapeHTML(username)} — Live Screen</h3>
+          <video id="screenRemoteVideo" autoplay playsinline style="flex:1;background:#000;border-radius:6px;max-height:100%;"></video>
+        </div>
+      `;
+      document.body.appendChild(modal);
+    }
+    const remoteVideo = document.getElementById('screenRemoteVideo');
+
+    const docRef = doc(db, "screenshares", username);
+    const snap = await getDoc(docRef);
+    if (!snap.exists()) return alert("No active screen share found for user: " + username);
+    const data = snap.data();
+    if (!data.offer) return alert("No offer found (user hasn't started sharing).");
+
+    // create peer connection and set remote (offer)
+    pcViewer = makePeerConnection((ev) => {
+      // attach remote stream to video element
+      if (ev.streams && ev.streams[0]) {
+        remoteVideo.srcObject = ev.streams[0];
+      }
+    }, async (candidate) => {
+      // save viewer's ICE to answerCandidates subcollection
+      try {
+        const ccol = collection(db, `screenshares/${username}/answerCandidates`);
+        await addDoc(ccol, JSON.parse(JSON.stringify(candidate)));
+      } catch (e) { console.warn("answer candidate save failed", e); }
+    });
+
+    const offerDesc = new RTCSessionDescription(data.offer);
+    await pcViewer.setRemoteDescription(offerDesc);
+
+    const answer = await pcViewer.createAnswer();
+    await pcViewer.setLocalDescription(answer);
+
+    // persist answer
+    await setDoc(docRef, { answer: { type: answer.type, sdp: answer.sdp }, status: 'answered', updatedAt: Date.now() }, { merge: true });
+
+    // listen for offer candidates (in case user added them before answer)
+    const offerCandsCol = collection(db, `screenshares/${username}/offerCandidates`);
+    screenOfferCandidatesUnsub = onSnapshot(offerCandsCol, (snap) => {
+      snap.docChanges().forEach(async ch => {
+        if (ch.type === 'added') {
+          const cand = ch.doc.data();
+          try { await pcViewer.addIceCandidate(new RTCIceCandidate(cand)); } catch(e){ console.warn(e); }
+        }
+      });
+    });
+
+    // listen for answer candidate acknowledgements (optional)
+    // viewer also saves their own candidates, so the student will pick them up via their listener
+
+    console.log("Admin viewing screen for", username);
+  } catch (err) {
+    console.error("adminViewScreen error", err);
+    alert("Failed to open viewer: " + (err.message || err));
+    if (pcViewer) { try{ pcViewer.close(); }catch(e){} pcViewer=null; }
+  }
+}
+
+// Add a small helper so admin UI can call this function (used below)
+window.adminViewScreen = adminViewScreen;
+
+
   /* ------------------------
    Announcements (Admin -> All users)
    ------------------------ */
@@ -932,6 +1161,8 @@ min-height:80px
           <button class="btn" onclick="toggleFlag()">⚑ Flag</button>
           <button class="btn" onclick="prevQuestion()">⟵ Prev</button>
           <button class="btn" onclick="nextQuestion()">Next ⟶</button>
+          <button id="screenShareBtn" class="btn" onclick="toggleScreenShare()">📺 Start Screen Share</button>
+
         </div>
         <div class="spacer"></div>
         <div class="timer" id="fsTimer">00:00:00</div>
@@ -2803,7 +3034,6 @@ async function renderSessionsAdmin() {
 
   // Live threshold
   const THRESHOLD = 15 * 1000; // 15 seconds
-  const now = Date.now();
 
   // fetch sessions
   let sessions = [];
@@ -2822,13 +3052,16 @@ async function renderSessionsAdmin() {
 
   // build UI
   out.innerHTML = '';
-  sessions.forEach(sess => {
+
+  // iterate with for..of so we can await per-session checks
+  for (const sess of sessions) {
     // normalize session id & fields
     const sessId = sess.id || sess._id || sess.sessionId || sess.userId || sess.username || 'unknown';
     const usernameKey = sess.username || sess.user || sess.name || '';
-    const user = localUsers.find(u => (u.username && u.username === sessId) || (u.username && u.username === usernameKey)) 
+    const user = localUsers.find(u => (u.username && u.username === sessId) || (u.username && u.username === usernameKey))
                || { username: usernameKey || sessId, fullName: sess.fullName || sess.displayName || usernameKey || sessId, photo: '' };
 
+    const now = Date.now();
     const lastUpdateMs = localTsToMillis(sess.updatedAt || sess.lastSeen || sess.ts || sess.timestamp || 0);
     const online = !!lastUpdateMs && ((now - lastUpdateMs) < THRESHOLD);
     const statusHTML = online ? `<span style="color:#34d399;font-weight:700">🟢 Online</span>` : `<span style="color:#f87171;font-weight:700">🔴 Offline</span>`;
@@ -2905,6 +3138,49 @@ async function renderSessionsAdmin() {
     actions.appendChild(clearBtn);
     actions.appendChild(deleteBtn);
 
+    // Add View Screen button and screen-share badge if screenshare exists
+    try {
+      if (typeof doc === 'function' && typeof getDoc === 'function' && typeof db !== 'undefined') {
+        const sDocRef = doc(db, "screenshares", sessId);
+        const sSnap = await getDoc(sDocRef);
+        if (sSnap && sSnap.exists()) {
+          const sData = sSnap.data() || {};
+          // show a small badge if screenshare is active/offered/answered
+          const state = (sData.status || (sData.offer ? 'offered' : '')).toString().toLowerCase();
+          if (state === 'offered' || state === 'offering' || state === 'answered') {
+            const ssBadge = document.createElement('span');
+            ssBadge.className = 'badge';
+            ssBadge.style.marginLeft = '8px';
+            ssBadge.style.background = '#60a5fa';
+            ssBadge.style.color = 'white';
+            ssBadge.textContent = 'Screen Share';
+            actions.appendChild(ssBadge);
+          }
+          // view screen button
+          const viewScreenBtn = makeBtn('View Screen', 'btn', async () => {
+            try {
+              const snapNow = await getDoc(sDocRef);
+              if (!snapNow || !snapNow.exists()) return alert('No screen share active for ' + sessId);
+              // optionally check status before calling
+              const sd = snapNow.data() || {};
+              if (!sd.offer) return alert('User has not offered a screen share yet.');
+              if (typeof adminViewScreen === 'function') {
+                adminViewScreen(sessId);
+              } else {
+                alert('adminViewScreen function not implemented in this environment.');
+              }
+            } catch (err) {
+              console.warn('view screen error', err);
+              alert('Failed to open screen viewer');
+            }
+          });
+          actions.appendChild(viewScreenBtn);
+        }
+      }
+    } catch (e) {
+      console.warn('screenshare check failed for', sessId, e);
+    }
+
     if (sess.locked) {
       const lockedBadge = document.createElement('span');
       lockedBadge.className = 'badge';
@@ -2923,7 +3199,9 @@ async function renderSessionsAdmin() {
     wrapper.appendChild(mid);
     wrapper.appendChild(actions);
     out.appendChild(wrapper);
-  });
+  } // end for..of
+}
+
 // --- add live-count badge update (paste at end of renderSessionsAdmin) ---
 (function updateLiveCountBadge(sessionsArr) {
   try {
@@ -4374,4 +4652,5 @@ function hideVisitorMessage() {
 </script>
 </body>
 </html>
+
 
