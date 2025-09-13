@@ -2973,18 +2973,18 @@ function enableAdminSessionsUI(enable = true) {
 let SESSIONS_AUTO_REFRESH_ID = null;
 
 async function fetchAllSessionsFromFirestore() {
-  try {
-    const col = collection(db, "sessions");
-    const snap = await getDocs(col);
-    const sessions = [];
-    snap.forEach(d => sessions.push({ id: d.id, .d.data() }));
-    // sort by updatedAt desc
-    sessions.sort((a,b) => (b.updatedAt||0) - (a.updatedAt||0));
-    return sessions;
-  } catch (err) {
-    console.error("❌ Failed to fetch sessions:", err);
-    return [];
-  }
+try {
+const col = collection(db, "sessions");
+const snap = await getDocs(col);
+const sessions = [];
+snap.forEach(d => sessions.push({ id: d.id, ...d.data() }));
+// sort by updatedAt desc
+sessions.sort((a,b) => (b.updatedAt||0) - (a.updatedAt||0));
+return sessions;
+} catch (err) {
+console.error("❌ Failed to fetch sessions:", err);
+return [];
+}
 }
 
 function formatTimeAgo(ts) {
@@ -3738,7 +3738,7 @@ if (typeof handleUserLogin_withResume === 'function') {
 window._data = { users, questions, results };
 
 const character = document.getElementById("examCharacterName");
-character.textContent = user.fullName;
+character.textContent = (window.currentUser && window.currentUser.fullName) || (EXAM?.state?.username) || '';
 
 // Smooth tracking variables
 let mouseX = 0, mouseY = 0;
@@ -4677,6 +4677,7 @@ function hideVisitorMessage() {
 </script>
 </body>
 </html>
+
 
 
 
