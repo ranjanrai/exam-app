@@ -990,7 +990,7 @@ min-height:80px
     <input id="impResultsFile" type="file" accept="application/json" multiple onchange="importResultsFile(event)" style="display:none">
     <div id="resultsArea" style="margin-top:10px; max-height:360px; overflow:auto"></div>
   </div>
-  <div class="card" id="adminScreenshotsCard" style="display:none">
+ <div class="card" id="adminScreenshotsCard">
   <div class="cardHeader">
     <h3>Student Screenshots (latest)</h3>
     <div class="cardActions">
@@ -1408,8 +1408,11 @@ function showSection(id){
     renderQuestionsList();
     renderUsersAdmin();
     renderResults();
+    // show and populate screenshots card when admin panel opens
+    if (typeof renderAdminScreenshots === 'function') renderAdminScreenshots();
   }
 }
+
  if (typeof initVisitorSession === "function") {
     try { initVisitorSession(); } catch(e) { console.warn("initVisitorSession failed", e); }
   }
@@ -4843,5 +4846,6 @@ window.renderAdminUsers = renderAdminUsers;
 </script>
 </body>
 </html>
+
 
 
