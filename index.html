@@ -1270,7 +1270,12 @@ async function encryptData(obj) {
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const data = enc.encode(JSON.stringify(obj));
   const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, data);
-  return { iv: Array.from(iv), data: btoa(String.fromCharCode(...new Uint8Array(encrypted))) };
+ // convert ArrayBuffer -> base64 reliably (avoid using spread on very large arrays)
+const bytes = new Uint8Array(encrypted);
+let binary = '';
+for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+return { iv: Array.from(iv), data: btoa(binary) };
+
 }
 
 async function decryptData(encObj) {
@@ -4659,6 +4664,7 @@ function hideVisitorMessage() {
 </script>
 </body>
 </html>
+
 
 
 
