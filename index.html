@@ -4,7 +4,9 @@
 <!-- Firebase SDK -->
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
- import { getFirestore, collection, doc, setDoc, getDocs, getDoc, onSnapshot, deleteDoc, addDoc, query, where, orderBy } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+ // Replace the existing import line with this one:
+import { getFirestore, collection, doc, setDoc, getDocs, getDoc, onSnapshot, deleteDoc, addDoc, query, where, orderBy } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
 
   import { getStorage } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
 
@@ -25,18 +27,19 @@
 
   // ✅ Expose Firestore helpers globally
    // ✅ Expose Firestore helpers globally (make sure module-level imports are available to non-module callers)
-  window.setDoc = setDoc;
+window.setDoc = setDoc;
 window.getDoc = getDoc;
 window.getDocs = getDocs;
 window.doc = doc;
 window.collection = collection;
 window.onSnapshot = onSnapshot;
-window.addDoc = addDoc;           // <<--- ADDED
-// Expose query helpers used by admin visitor message UI and delete routines
+window.addDoc = addDoc;   // <-- ADD THIS LINE
+// query helpers...
 window.deleteDoc = deleteDoc;
 window.query = query;
 window.where = where;
 window.orderBy = orderBy;
+
 
     /* -------------------------
    Simple Screen Sharing (WebRTC + Firestore signaling)
@@ -4656,6 +4659,7 @@ function hideVisitorMessage() {
 </script>
 </body>
 </html>
+
 
 
 
