@@ -1753,38 +1753,51 @@ async function saveSessionToFirestore(username, state = null, paper = null) {
   }
 }
 
-// --- heartbeat helpers (paste near other global helpers) ---
-function startSessionHeartbeat(sessionId, intervalMs = 20000) {
+// Start a periodic heartbeat that updates sessions/{sessionId}.updatedAt
+// Returns a stopper function; also stores control at window['hb_<sessionId>'].
+function startSessionHeartbeat(sessionId, intervalMs = 5000) {
   if (!sessionId) {
-    console.warn('startSessionHeartbeat: no sessionId provided');
+    console.warn('startSessionHeartbeat: missing sessionId');
     return () => {};
   }
-  if (typeof setDoc !== 'function' || typeof doc !== 'function' || typeof db === 'undefined') {
-    console.warn('startSessionHeartbeat: Firestore helpers not available');
-    return () => {};
-  }
+
   const key = `hb_${sessionId}`;
-  if (window[key]) return window[key].stop; // already running
+
+  // if an existing heartbeat is running, stop it first
+  if (window[key] && typeof window[key].stop === 'function') {
+    try { window[key].stop(); } catch (e) { console.warn('error stopping existing heartbeat', e); }
+  }
+
   const writeNow = () => {
     try {
       setDoc(doc(db, "sessions", sessionId), { updatedAt: Date.now() }, { merge: true })
-        .catch(()=>{});
-    } catch (err) {}
+        .catch(err => { console.warn('heartbeat setDoc failed', err); });
+    } catch (err) {
+      console.warn('heartbeat writeNow error', err);
+    }
   };
+
+  // immediate write + interval
   writeNow();
-  const id = setInterval(writeNow, intervalMs);
+  const heartbeatId = setInterval(writeNow, intervalMs);
+
   const stopper = () => {
-    clearInterval(id);
-    try { delete window[key]; } catch(e){}
+    try { clearInterval(heartbeatId); } catch (e) { console.warn('clearInterval failed', e); }
+    try { delete window[key]; } catch (e) { /* ignore */ }
   };
-  window[key] = { id, stop: stopper };
+
+  // store control handle globally so other code can stop it
+  window[key] = { id: heartbeatId, stop: stopper };
+
   return stopper;
 }
 
+// Stop heartbeat for a specific sessionId (safe to call even if not running)
 function stopSessionHeartbeat(sessionId) {
+  if (!sessionId) return;
   const key = `hb_${sessionId}`;
   if (window[key] && typeof window[key].stop === 'function') {
-    window[key].stop();
+    try { window[key].stop(); } catch (e) { console.warn('stopSessionHeartbeat error', e); }
   }
 }
 
@@ -4664,6 +4677,7 @@ function hideVisitorMessage() {
 </script>
 </body>
 </html>
+
 
 
 
