@@ -266,158 +266,6 @@ window.clearAnnouncementBox = clearAnnouncementBox;
 window.deleteAnnouncement = deleteAnnouncement;
 window.renderAdminAnnouncementsLive = renderAdminAnnouncementsLive;
 window.startAnnouncementsListenerForStudents = startAnnouncementsListenerForStudents;
-
-  // ---------------------- Screen sharing (student) ----------------------
-// Requires: `window.storage` (Firebase Storage) and `EXAM.state.username` set
-let SCREEN_SHARE_STREAM = null;
-let SCREEN_SHOT_INTERVAL_ID = null;
-let SCREEN_SHOT_VIDEO = null;
-const SCREENSHOT_INTERVAL_MS = 4000; // upload every 4s (adjustable)
-const SCREENSHOT_QUALITY = 0.7;      // jpeg quality 0..1
-
-async function startScreenShare() {
-  if (!EXAM?.state?.username) return alert('Start exam first.');
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
-    return alert('Screen capture not supported in this browser.');
-  }
-  try {
-    SCREEN_SHARE_STREAM = await navigator.mediaDevices.getDisplayMedia({ video: true });
-    // create hidden video to render stream
-    SCREEN_SHOT_VIDEO = document.createElement('video');
-    SCREEN_SHOT_VIDEO.style.display = 'none';
-    SCREEN_SHOT_VIDEO.autoplay = true;
-    SCREEN_SHOT_VIDEO.srcObject = SCREEN_SHARE_STREAM;
-    document.body.appendChild(SCREEN_SHOT_VIDEO);
-
-    // start periodic capture -> upload
-    SCREEN_SHOT_INTERVAL_ID = setInterval(() => captureAndUploadScreenshot(), SCREENSHOT_INTERVAL_MS);
-    // also start one immediately
-    captureAndUploadScreenshot();
-
-    // When user stops via browser UI (stop tracks), cleanup
-    SCREEN_SHARE_STREAM.getVideoTracks().forEach(track => {
-      track.addEventListener('ended', () => {
-        stopScreenShare(); // auto-cleanup
-      });
-    });
-
-    console.log('✅ Screen share started');
-    // optional UI update
-    const btn = document.getElementById('btnStartScreenShare');
-    if (btn) btn.style.display = 'none';
-    const stopBtn = document.getElementById('btnStopScreenShare');
-    if (stopBtn) stopBtn.style.display = 'inline-block';
-  } catch (err) {
-    console.warn('Screen share failed:', err);
-    alert('Failed to start screen share (see console).');
-  }
-}
-
-async function stopScreenShare() {
-  try {
-    if (SCREEN_SHOT_INTERVAL_ID) { clearInterval(SCREEN_SHOT_INTERVAL_ID); SCREEN_SHOT_INTERVAL_ID = null; }
-    if (SCREEN_SHARE_STREAM) {
-      SCREEN_SHARE_STREAM.getTracks().forEach(t => t.stop());
-      SCREEN_SHARE_STREAM = null;
-    }
-    if (SCREEN_SHOT_VIDEO) {
-      SCREEN_SHOT_VIDEO.remove();
-      SCREEN_SHOT_VIDEO = null;
-    }
-    console.log('✅ Screen share stopped');
-    const btn = document.getElementById('btnStartScreenShare');
-    if (btn) btn.style.display = 'inline-block';
-    const stopBtn = document.getElementById('btnStopScreenShare');
-    if (stopBtn) stopBtn.style.display = 'none';
-  } catch (e) {
-    console.warn('stopScreenShare error', e);
-  }
-}
-
-async function captureAndUploadScreenshot() {
-  try {
-    if (!SCREEN_SHOT_VIDEO || !SCREEN_SHOT_VIDEO.videoWidth) return;
-    const cw = SCREEN_SHOT_VIDEO.videoWidth;
-    const ch = SCREEN_SHOT_VIDEO.videoHeight;
-    const canvas = document.createElement('canvas');
-    canvas.width = cw;
-    canvas.height = ch;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(SCREEN_SHOT_VIDEO, 0, 0, cw, ch);
-    // scale down if very large (optional to save bandwidth)
-    const MAX_SIDE = 1280;
-    let targetCanvas = canvas;
-    if (Math.max(cw, ch) > MAX_SIDE) {
-      const scale = MAX_SIDE / Math.max(cw,ch);
-      const sCanvas = document.createElement('canvas');
-      sCanvas.width = Math.round(cw * scale);
-      sCanvas.height = Math.round(ch * scale);
-      sCanvas.getContext('2d').drawImage(canvas, 0, 0, sCanvas.width, sCanvas.height);
-      targetCanvas = sCanvas;
-    }
-    const blob = await new Promise(res => targetCanvas.toBlob(res, 'image/jpeg', SCREENSHOT_QUALITY));
-    if (!blob) return;
-
-    // upload to Firebase Storage: path `screenshots/{username}/{timestamp}.jpg`
-    const username = EXAM.state.username;
-    if (!username) return;
-
-    const ts = Date.now();
-    // use Firebase Storage API (v10+)
-    const storageRef = window.storage && typeof window.storage.ref === 'function'
-      ? window.storage.ref(`screenshots/${username}/${ts}.jpg`)
-      : null;
-
-    if (storageRef && typeof window.uploadBytes === 'function') {
-      // If you exposed uploadHelpers globally, use them; else use direct API
-      await uploadBytes(storageRef, blob, { contentType: 'image/jpeg' });
-      // Optionally write a small index doc to Firestore so admin can easily query latest screenshot
-      try {
-        await setDoc(doc(db, "screenshots_meta", `${username}_${ts}`), {
-          username, ts, storagePath: `screenshots/${username}/${ts}.jpg`, createdAt: Date.now()
-        });
-      } catch (e) {
-        // non-fatal
-      }
-    } else if (window.storage && typeof window.storageRef === 'function') {
-      // fallback for different wrapper names (unlikely)
-      await window.storageRef(`screenshots/${username}/${ts}.jpg`).put(blob);
-    } else {
-      // If your app uses different helpers, try the recommended API:
-      // import { ref, uploadBytes } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
-      // const refObj = ref(window.storage, `screenshots/${username}/${ts}.jpg`);
-      // await uploadBytes(refObj, blob);
-      // We'll attempt the modern API via global functions if available:
-      if (typeof window.ref === 'function' && typeof window.uploadBytes === 'function') {
-        const r = window.ref(window.storage, `screenshots/${username}/${ts}.jpg`);
-        await window.uploadBytes(r, blob);
-        try {
-          await setDoc(doc(db, "screenshots_meta", `${username}_${ts}`), {
-            username, ts, storagePath: `screenshots/${username}/${ts}.jpg`, createdAt: Date.now()
-          });
-        } catch(e){}
-      } else {
-        // as a last resort, store small base64 in Firestore doc (not ideal for large images)
-        const dataUrl = await new Promise(res => {
-          const tmp = document.createElement('canvas');
-          tmp.width = targetCanvas.width;
-          tmp.height = targetCanvas.height;
-          tmp.getContext('2d').drawImage(targetCanvas, 0, 0);
-          res(tmp.toDataURL('image/jpeg', SCREENSHOT_QUALITY));
-        });
-        // write metadata + small image to `screenshots_meta` (watch out for Firestore limits if large)
-        await setDoc(doc(db, "screenshots_meta", `${username}_${ts}`), { username, ts, dataUrl, createdAt: Date.now() });
-      }
-    }
-  } catch (err) {
-    console.warn('captureAndUploadScreenshot error', err);
-  }
-}
-
-// Expose to window for inline onclick usage
-window.startScreenShare = startScreenShare;
-window.stopScreenShare = stopScreenShare;
-
 </script>
 
 
@@ -616,27 +464,6 @@ min-height:80px
     padding: 0;
   }
 }
-/* small modal & thumbnail styles for admin screenshots */
-#adminScreenshotsContainer { display:flex; gap:10px; flex-wrap:wrap; align-items:flex-start; }
-.ssThumb {
-  width:160px; height:90px; object-fit:cover; border-radius:6px; cursor:pointer;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.08); border:1px solid rgba(0,0,0,0.06);
-}
-.screenshotCard {
-  display:flex; flex-direction:column; gap:6px; width:160px; font-size:12px;
-}
-.modal { position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1200; display:flex; align-items:center; justify-content:center; }
-.modalContent { background:#fff; padding:14px; border-radius:8px; width:90%; max-width:900px; position:relative; }
-.modalClose { position:absolute; right:10px; top:8px; border:0; background:transparent; font-size:18px; cursor:pointer; }
-/* Admin users list styles */
-.userRow { display:flex; align-items:center; gap:12px; padding:8px; border-bottom:1px solid #eee; }
-.userRow.disabled { opacity:0.55; background:#fff7f7; }
-.userInfo { flex:1; display:flex; flex-direction:column; }
-.userActions { display:flex; gap:8px; }
-.userToggleBtn { padding:6px 8px; border-radius:6px; border:1px solid rgba(0,0,0,0.06); cursor:pointer; background:#fff; }
-.userToggleBtn.disable { background:#ffecec; border-color:#ffbaba; }
-.userToggleBtn.enable { background:#e6fff1; border-color:#b7f0c8; }
-.smallHint { font-size:11px; color:#555; }
 
 </style>
 </head>
@@ -852,19 +679,6 @@ min-height:80px
 <div id="questionPreview" class="small" style="margin-top:8px; font-weight:bold; color:#2563eb;">
   Total Questions: 0
 </div>
-<!-- Admin: Users list (add enable/disable controls) -->
-<div class="card" id="adminUsersCard">
-  <div class="cardHeader">
-    <h3>Registered Users</h3>
-    <div class="cardActions">
-      <button class="btn" id="btnRefreshUsers">Refresh</button>
-    </div>
-  </div>
-  <div class="cardBody" id="adminUsersContainer">
-    <!-- JS will populate user rows here -->
-    <div class="small">Loading users…</div>
-  </div>
-</div>
 
   <div class="card">
     <h3>Exam Settings</h3>
@@ -990,31 +804,6 @@ min-height:80px
     <input id="impResultsFile" type="file" accept="application/json" multiple onchange="importResultsFile(event)" style="display:none">
     <div id="resultsArea" style="margin-top:10px; max-height:360px; overflow:auto"></div>
   </div>
- <div class="card" id="adminScreenshotsCard">
-  <div class="cardHeader">
-    <h3>Student Screenshots (latest)</h3>
-    <div class="cardActions">
-      <button class="btn" id="btnRefreshScreenshots">Refresh</button>
-    </div>
-  </div>
-  <div class="cardBody small" id="adminScreenshotsContainer">
-    <div class="small">Loading screenshots…</div>
-  </div>
-</div>
-
-<!-- Modal for viewing full-size screenshot -->
-<div id="screenshotModal" class="modal" style="display:none">
-  <div class="modalContent">
-    <button class="modalClose" id="screenshotModalClose">✕</button>
-    <div id="screenshotModalBody" style="text-align:center">
-      <div class="small" id="screenshotMeta"></div>
-      <img id="screenshotModalImg" src="" alt="screenshot" style="max-width:100%; max-height:70vh; border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,0.12)"/>
-      <div style="margin-top:8px">
-        <a id="screenshotDownloadLink" class="btn" href="#" download>Download</a>
-      </div>
-    </div>
-  </div>
-</div>
 <!-- Announcements / Live Chat (Admin → All users) -->
 <div class="card" id="adminAnnouncementsCard" style="margin-top:12px; display:block;">
   <h3>Announcements — Broadcast to all students</h3>
@@ -1143,8 +932,6 @@ min-height:80px
           <button class="btn" onclick="toggleFlag()">⚑ Flag</button>
           <button class="btn" onclick="prevQuestion()">⟵ Prev</button>
           <button class="btn" onclick="nextQuestion()">Next ⟶</button>
-          <button class="btn" id="btnStartScreenShare" onclick="startScreenShare()">🔴 Start Screen Share</button>
-<button class="btn" id="btnStopScreenShare" onclick="stopScreenShare()" style="display:none">⏹ Stop Screen Share</button>
         </div>
         <div class="spacer"></div>
         <div class="timer" id="fsTimer">00:00:00</div>
@@ -1408,11 +1195,8 @@ function showSection(id){
     renderQuestionsList();
     renderUsersAdmin();
     renderResults();
-    // show and populate screenshots card when admin panel opens
-    if (typeof renderAdminScreenshots === 'function') renderAdminScreenshots();
   }
 }
-
  if (typeof initVisitorSession === "function") {
     try { initVisitorSession(); } catch(e) { console.warn("initVisitorSession failed", e); }
   }
@@ -4586,266 +4370,8 @@ function hideVisitorMessage() {
   if (span) span.textContent = "";
 }
 
-  // Admin: render latest screenshots thumbnails
-// Requires global `db` (Firestore) and `storage` (Firebase Storage) to be available.
-const adminScreenshotsCard = document.getElementById('adminScreenshotsCard');
-const adminScreenshotsContainer = document.getElementById('adminScreenshotsContainer');
-const btnRefreshScreenshots = document.getElementById('btnRefreshScreenshots');
-
-async function renderAdminScreenshots(forceRefresh = false) {
-  if (!db) {
-    console.warn('Firestore (db) not ready for screenshots.');
-    return;
-  }
-  adminScreenshotsCard.style.display = 'block';
-  adminScreenshotsContainer.innerHTML = '<div class="small">Loading screenshots…</div>';
-
-  try {
-    // Fetch latest screenshot metadata ordered by timestamp desc
-    const q = query(collection(db, 'screenshots_meta'), orderBy('ts', 'desc'));
-    const snap = await getDocs(q);
-
-    if (!snap || snap.empty) {
-      adminScreenshotsContainer.innerHTML = '<div class="small">No screenshots found.</div>';
-      return;
-    }
-
-    // Build a map of latest per username (first hit per user because ordered desc)
-    const latestPerUser = new Map();
-    snap.forEach(docSnap => {
-      const d = docSnap.data();
-      if (!d || !d.username) return;
-      if (!latestPerUser.has(d.username)) {
-        latestPerUser.set(d.username, d);
-      }
-    });
-
-    // Render thumbnails
-    adminScreenshotsContainer.innerHTML = '';
-    for (const [username, meta] of latestPerUser.entries()) {
-      const thumbWrap = document.createElement('div');
-      thumbWrap.className = 'screenshotCard';
-      const img = document.createElement('img');
-      img.className = 'ssThumb';
-      img.alt = `${username} - ${new Date(meta.ts).toLocaleString()}`;
-      img.dataset.username = username;
-      img.dataset.ts = meta.ts;
-      img.src = ''; // placeholder until URL fetched
-      thumbWrap.appendChild(img);
-
-      const label = document.createElement('div');
-      label.className = 'verySmall';
-      label.textContent = `${username} • ${new Date(meta.ts).toLocaleString()}`;
-      thumbWrap.appendChild(label);
-
-      const actions = document.createElement('div');
-      actions.style.display = 'flex';
-      actions.style.gap = '6px';
-      actions.style.marginTop = '6px';
-
-      const viewBtn = document.createElement('button');
-      viewBtn.className = 'btn';
-      viewBtn.textContent = 'View';
-      viewBtn.onclick = () => openScreenshotModal(meta);
-      actions.appendChild(viewBtn);
-
-      const dlBtn = document.createElement('a');
-      dlBtn.className = 'btn';
-      dlBtn.textContent = 'Open';
-      dlBtn.href = '#';
-      dlBtn.target = '_blank';
-      dlBtn.rel = 'noopener';
-      actions.appendChild(dlBtn);
-
-      thumbWrap.appendChild(actions);
-      adminScreenshotsContainer.appendChild(thumbWrap);
-
-      // Resolve storage URL (if storagePath present)
-      if (meta.storagePath && window.getDownloadURL && window.ref) {
-        try {
-          const pathRef = window.ref(window.storage, meta.storagePath);
-          // getDownloadURL may be an imported function; try both patterns
-          const url = await getDownloadURL(pathRef);
-          img.src = url;
-          dlBtn.href = url;
-        } catch (e) {
-          console.warn('getDownloadURL failed for', meta.storagePath, e);
-          // fallback to dataUrl if provided in meta
-          if (meta.dataUrl) {
-            img.src = meta.dataUrl;
-            dlBtn.href = meta.dataUrl;
-          } else {
-            img.src = '';
-            dlBtn.href = '#';
-          }
-        }
-      } else if (meta.dataUrl) {
-        img.src = meta.dataUrl;
-        actions.querySelector('a').href = meta.dataUrl;
-      }
-    }
-  } catch (err) {
-    console.error('renderAdminScreenshots error', err);
-    adminScreenshotsContainer.innerHTML = '<div class="small">Error loading screenshots (see console).</div>';
-  }
-}
-
-// Open modal with larger image & download link
-const screenshotModal = document.getElementById('screenshotModal');
-const screenshotModalImg = document.getElementById('screenshotModalImg');
-const screenshotModalClose = document.getElementById('screenshotModalClose');
-const screenshotModalBody = document.getElementById('screenshotModalBody');
-const screenshotMeta = document.getElementById('screenshotMeta');
-const screenshotDownloadLink = document.getElementById('screenshotDownloadLink');
-
-function openScreenshotModal(meta) {
-  screenshotModal.style.display = 'flex';
-  screenshotModalImg.src = '';
-  screenshotMeta.textContent = `${meta.username} • ${new Date(meta.ts).toLocaleString()}`;
-  screenshotDownloadLink.href = '#';
-  // Prefer storagePath -> getDownloadURL; fallback to dataUrl
-  if (meta.storagePath && window.ref) {
-    const pRef = window.ref(window.storage, meta.storagePath);
-    getDownloadURL(pRef).then(url => {
-      screenshotModalImg.src = url;
-      screenshotDownloadLink.href = url;
-    }).catch(e => {
-      console.warn('download url error', e);
-      if (meta.dataUrl) {
-        screenshotModalImg.src = meta.dataUrl;
-        screenshotDownloadLink.href = meta.dataUrl;
-      } else {
-        screenshotModalImg.alt = 'Unable to load image';
-      }
-    });
-  } else if (meta.dataUrl) {
-    screenshotModalImg.src = meta.dataUrl;
-    screenshotDownloadLink.href = meta.dataUrl;
-  } else {
-    screenshotModalImg.alt = 'No image available';
-  }
-}
-
-function closeScreenshotModal() {
-  screenshotModal.style.display = 'none';
-  screenshotModalImg.src = '';
-}
-
-screenshotModalClose.addEventListener('click', closeScreenshotModal);
-screenshotModal.addEventListener('click', (ev) => {
-  if (ev.target === screenshotModal) closeScreenshotModal();
-});
-
-if (btnRefreshScreenshots) btnRefreshScreenshots.addEventListener('click', () => renderAdminScreenshots(true));
-
-// Auto-run when admin page initializes (call this from your admin init)
-window.renderAdminScreenshots = renderAdminScreenshots;
-
-  // Admin: enable / disable users
-const adminUsersContainer = document.getElementById('adminUsersContainer');
-const btnRefreshUsers = document.getElementById('btnRefreshUsers');
-
-// Render list of users with enable/disable control
-async function renderAdminUsers() {
-  if (!db) return console.warn('Firestore not ready');
-  adminUsersContainer.innerHTML = '<div class="small">Loading users…</div>';
-  try {
-    // Fetch users collection
-    const q = query(collection(db, 'users'), orderBy('createdAt', 'asc'));
-    const snap = await getDocs(q);
-    if (!snap || snap.empty) {
-      adminUsersContainer.innerHTML = '<div class="small">No users found.</div>';
-      return;
-    }
-    adminUsersContainer.innerHTML = '';
-    snap.forEach(docSnap => {
-      const u = docSnap.data();
-      const uid = docSnap.id;
-      const row = document.createElement('div');
-      row.className = 'userRow' + (u.disabled ? ' disabled' : '');
-      // left: user info
-      const info = document.createElement('div');
-      info.className = 'userInfo';
-      const title = document.createElement('div');
-      title.textContent = u.displayName || u.username || (u.email || 'Unknown user');
-      const sub = document.createElement('div');
-      sub.className = 'smallHint';
-      sub.textContent = `UID: ${uid} • ${u.email || ''} ${u.role ? ' • ' + u.role : ''}`;
-      info.appendChild(title);
-      info.appendChild(sub);
-      row.appendChild(info);
-
-      // right: actions
-      const actions = document.createElement('div');
-      actions.className = 'userActions';
-
-      // Enable/Disable button
-      const toggleBtn = document.createElement('button');
-      toggleBtn.className = 'userToggleBtn ' + (u.disabled ? 'enable' : 'disable');
-      toggleBtn.textContent = u.disabled ? 'Enable' : 'Disable';
-      toggleBtn.onclick = async () => {
-        toggleBtn.disabled = true;
-        try {
-          const newDisabled = !Boolean(u.disabled);
-          // Update users/{uid} doc: set disabled flag
-          await updateDoc(doc(db, 'users', uid), { disabled: newDisabled, updatedAt: Date.now() });
-          // Update UI immediately
-          u.disabled = newDisabled;
-          row.classList.toggle('disabled', newDisabled);
-          toggleBtn.className = 'userToggleBtn ' + (newDisabled ? 'enable' : 'disable');
-          toggleBtn.textContent = newDisabled ? 'Enable' : 'Disable';
-          // Optional: write an audit entry for admin actions
-          try {
-            await addDoc(collection(db, 'admin_user_actions'), {
-              actorUid: auth?.currentUser?.uid || 'unknown',
-              targetUid: uid,
-              action: newDisabled ? 'disable' : 'enable',
-              ts: Date.now()
-            });
-          } catch (e) { /* non-fatal */ }
-        } catch (err) {
-          console.error('Failed to update user disabled flag', err);
-          alert('Unable to update user status (see console).');
-        } finally {
-          toggleBtn.disabled = false;
-        }
-      };
-      actions.appendChild(toggleBtn);
-
-      // Optional: Force-logout / revoke session button (if you have backend session invalidation)
-      const forceBtn = document.createElement('button');
-      forceBtn.className = 'userToggleBtn';
-      forceBtn.textContent = 'Force Logout';
-      forceBtn.onclick = async () => {
-        if (!confirm(`Force logout ${u.displayName || uid}? This will not sign them out immediately unless you also implement token revocation.`)) return;
-        try {
-          // Write a flag that client checks periodically (e.g., 'forceSignOut' on user doc)
-          await updateDoc(doc(db, 'users', uid), { forceSignOut: Date.now() });
-          alert('Force logout requested (client-side should handle this on next polling).');
-        } catch (e) {
-          console.error('force logout error', e);
-          alert('Failed to request force logout.');
-        }
-      };
-      actions.appendChild(forceBtn);
-
-      row.appendChild(actions);
-      adminUsersContainer.appendChild(row);
-    });
-  } catch (err) {
-    console.error('renderAdminUsers error', err);
-    adminUsersContainer.innerHTML = '<div class="small">Error loading users (see console).</div>';
-  }
-}
-
-if (btnRefreshUsers) btnRefreshUsers.addEventListener('click', renderAdminUsers);
-
-// Expose for admin init
-window.renderAdminUsers = renderAdminUsers;
-
+  
 </script>
 </body>
 </html>
-
-
 
