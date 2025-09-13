@@ -1596,12 +1596,25 @@ function buildPaper(qbank, shuffle){
   }
 
   // shuffle overall exam if enabled
+   // shuffle overall exam if enabled
   if (shuffle) {
+    // Fisher–Yates shuffle for uniform randomness
     for (let i = selected.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [selected[i], selected[j]] = [selected[j], selected[i]];
     }
   }
+
+  // ensure each picked question has an id (for older seeded items)
+  selected = selected.map(q => {
+    if (!q.id) q.id = uid();
+    return q;
+  });
+
+  // return a shallow copy so later mutations don't touch the original bank
+  return selected.slice();
+}
+
 
   return selected.map(q => ({
     id: q.id,
@@ -4677,6 +4690,7 @@ function hideVisitorMessage() {
 </script>
 </body>
 </html>
+
 
 
 
