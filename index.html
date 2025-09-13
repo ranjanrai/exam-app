@@ -990,6 +990,31 @@ min-height:80px
     <input id="impResultsFile" type="file" accept="application/json" multiple onchange="importResultsFile(event)" style="display:none">
     <div id="resultsArea" style="margin-top:10px; max-height:360px; overflow:auto"></div>
   </div>
+  <div class="card" id="adminScreenshotsCard" style="display:none">
+  <div class="cardHeader">
+    <h3>Student Screenshots (latest)</h3>
+    <div class="cardActions">
+      <button class="btn" id="btnRefreshScreenshots">Refresh</button>
+    </div>
+  </div>
+  <div class="cardBody small" id="adminScreenshotsContainer">
+    <div class="small">Loading screenshots…</div>
+  </div>
+</div>
+
+<!-- Modal for viewing full-size screenshot -->
+<div id="screenshotModal" class="modal" style="display:none">
+  <div class="modalContent">
+    <button class="modalClose" id="screenshotModalClose">✕</button>
+    <div id="screenshotModalBody" style="text-align:center">
+      <div class="small" id="screenshotMeta"></div>
+      <img id="screenshotModalImg" src="" alt="screenshot" style="max-width:100%; max-height:70vh; border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,0.12)"/>
+      <div style="margin-top:8px">
+        <a id="screenshotDownloadLink" class="btn" href="#" download>Download</a>
+      </div>
+    </div>
+  </div>
+</div>
 <!-- Announcements / Live Chat (Admin → All users) -->
 <div class="card" id="adminAnnouncementsCard" style="margin-top:12px; display:block;">
   <h3>Announcements — Broadcast to all students</h3>
@@ -1034,31 +1059,7 @@ min-height:80px
   </div>
   <div class="small" style="margin-top:8px">Shows active/persisted session state saved in Firestore 'sessions' collection.</div>
 </div>
-<div class="card" id="adminScreenshotsCard" style="display:none">
-  <div class="cardHeader">
-    <h3>Student Screenshots (latest)</h3>
-    <div class="cardActions">
-      <button class="btn" id="btnRefreshScreenshots">Refresh</button>
-    </div>
-  </div>
-  <div class="cardBody small" id="adminScreenshotsContainer">
-    <div class="small">Loading screenshots…</div>
-  </div>
-</div>
 
-<!-- Modal for viewing full-size screenshot -->
-<div id="screenshotModal" class="modal" style="display:none">
-  <div class="modalContent">
-    <button class="modalClose" id="screenshotModalClose">✕</button>
-    <div id="screenshotModalBody" style="text-align:center">
-      <div class="small" id="screenshotMeta"></div>
-      <img id="screenshotModalImg" src="" alt="screenshot" style="max-width:100%; max-height:70vh; border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,0.12)"/>
-      <div style="margin-top:8px">
-        <a id="screenshotDownloadLink" class="btn" href="#" download>Download</a>
-      </div>
-    </div>
-  </div>
-</div>
 
   <div style="height:12px"></div>
   <div class="small">Tip: All data stored locally in this browser. Use export/import to move data between machines.</div>
@@ -4842,4 +4843,5 @@ window.renderAdminUsers = renderAdminUsers;
 </script>
 </body>
 </html>
+
 
