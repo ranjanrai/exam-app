@@ -4,7 +4,7 @@
 <!-- Firebase SDK -->
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
- import { getFirestore, collection, doc, setDoc, getDocs, getDoc, onSnapshot, deleteDoc, query, where, orderBy } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+ import { getFirestore, collection, doc, setDoc, getDocs, getDoc, onSnapshot, deleteDoc, addDoc, query, where, orderBy } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
   import { getStorage } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
 
@@ -26,16 +26,17 @@
   // ✅ Expose Firestore helpers globally
    // ✅ Expose Firestore helpers globally (make sure module-level imports are available to non-module callers)
   window.setDoc = setDoc;
-  window.getDoc = getDoc;
-  window.getDocs = getDocs;
-  window.doc = doc;
-  window.collection = collection;
-  window.onSnapshot = onSnapshot;
-  // Expose query helpers used by admin visitor message UI and delete routines
-  window.deleteDoc = deleteDoc;
-  window.query = query;
-  window.where = where;
-  window.orderBy = orderBy;
+window.getDoc = getDoc;
+window.getDocs = getDocs;
+window.doc = doc;
+window.collection = collection;
+window.onSnapshot = onSnapshot;
+window.addDoc = addDoc;           // <<--- ADDED
+// Expose query helpers used by admin visitor message UI and delete routines
+window.deleteDoc = deleteDoc;
+window.query = query;
+window.where = where;
+window.orderBy = orderBy;
 
     /* -------------------------
    Simple Screen Sharing (WebRTC + Firestore signaling)
@@ -318,7 +319,8 @@ function renderAdminAnnouncementsLive(){
       snap.forEach(d => {
         const data = d.data();
         if(!data) return;
-        arr.push({ id: d.id, ...data });
+        arr.push(Object.assign({ id: d.id }, d.data()));
+
       });
       arr.sort((a,b) => (b.createdAt||0) - (a.createdAt||0));
       if(arr.length === 0){
@@ -2954,7 +2956,7 @@ async function fetchAllSessionsFromFirestore() {
     const col = collection(db, "sessions");
     const snap = await getDocs(col);
     const sessions = [];
-    snap.forEach(d => sessions.push({ id: d.id, ...d.data() }));
+    snap.forEach(d => sessions.push({ id: d.id, .d.data() }));
     // sort by updatedAt desc
     sessions.sort((a,b) => (b.updatedAt||0) - (a.updatedAt||0));
     return sessions;
@@ -4654,6 +4656,7 @@ function hideVisitorMessage() {
 </script>
 </body>
 </html>
+
 
 
 
