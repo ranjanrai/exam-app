@@ -1389,23 +1389,15 @@ async function startExam(user){
   const durationMs = Math.max(1, durationMin) * 60_000;
 
   // Fresh exam state: everyone starts with the SAME duration
- EXAM.state = EXAM.state || {};
-EXAM.state.username = (user && (user.username || user.email || user.displayName)) || 'student';
-
-// attempt to start screen recording (prompts user)
-// non-blocking: exam continues even if user denies; we record the result
-startScreenRecording(EXAM.state.username).then((started) => {
-  if (!started) {
-    console.warn('Screen recording did not start (user denied or error).');
-    EXAM.screenRecordingFailed = true;
-  } else {
-    EXAM.screenRecordingFailed = false;
-    console.log('Screen recording active for', EXAM.state.username);
-  }
-}).catch((err) => {
-  console.warn('startScreenRecording error', err);
-  EXAM.screenRecordingFailed = true;
-});
+  EXAM.state = {
+    username: user.username,
+    answers: {},
+    flags: {},
+    startedAt: Date.now(),
+    durationMs: durationMs,
+    remainingMs: durationMs,  // ← set baseline
+    submitted: false
+  };
   EXAM.cur = 0;
 
   // --- Optional resume logic (only if you WANT it)
@@ -1431,214 +1423,6 @@ startScreenRecording(EXAM.state.username).then((started) => {
   startTimer(); // uses EXAM.state.remainingMs
 await saveSessionToFirestore(user.username, EXAM.state, EXAM.paper);
 startPeriodicSessionSave();
-}
-/* ----------------------------
-   Screen share + recording helpers
-   ---------------------------- */
-
-window.EXAM = window.EXAM || {}; // ensure EXAM exists
-
-// Config: how often to flush a chunk (ms)
-const SCREEN_CHUNK_INTERVAL = 30_000; // 30s
-
-let _screenStream = null;
-let _screenRecorder = null;
-let _screenChunkTimer = null;
-let _hiddenScreenVideo = null;
-
-/**
- * Attempt to upload a Blob to Firebase Storage if SDK upload functions exist.
- * If Storage SDK not available or upload fails, fallback to triggering a download.
- * filename should be unique (e.g. `${username}_screen_${Date.now()}.webm`)
- */
-async function uploadBlobToStorage(blob, filename) {
-  try {
-    if (typeof window.storage !== 'undefined' && window.storage) {
-      // If the modular Firebase storage upload functions were imported elsewhere
-      // the page might expose helpers like uploadBytes or uploadBytesResumable.
-      // Try to use them if present, otherwise fallback to download.
-      if (typeof uploadBytes === 'function') {
-        // If uploadBytes is globally available (rare), use it.
-        const storageRef = ref(window.storage, `screen-recordings/${filename}`);
-        await uploadBytes(storageRef, blob);
-        console.log('✅ Uploaded chunk to Firebase storage (uploadBytes).', filename);
-        return true;
-      }
-      if (typeof uploadBytesResumable === 'function') {
-        const storageRef = ref(window.storage, `screen-recordings/${filename}`);
-        const task = uploadBytesResumable(storageRef, blob);
-        task.on('state_changed', null, (err) => {
-          console.warn('Upload error', err);
-        }, () => {
-          console.log('✅ Uploaded chunk to Firebase storage (resumable).', filename);
-        });
-        return true;
-      }
-      // If the page has firebase/storage API available under 'window.firebase' or similar,
-      // we attempt to use the standard modular functions via window.firebase (best-effort).
-      if (window.firebase && window.firebase.storage && typeof window.firebase.storage().ref === 'function') {
-        // legacy SDK present
-        const storageRef = window.firebase.storage().ref(`screen-recordings/${filename}`);
-        await storageRef.put(blob);
-        console.log('✅ Uploaded chunk to Firebase storage (legacy SDK).', filename);
-        return true;
-      }
-      // If we have a storage object but not upload helpers, try a basic fetch upload using
-      // a signed URL or similar is required — not available here. Fallthrough to download.
-    }
-  } catch (err) {
-    console.warn('⚠️ uploadBlobToStorage failed, falling back to download', err);
-  }
-
-  // Fallback: create a download link so the recording chunk is preserved locally.
-  try {
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = filename;
-    // auto-click to download
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-    console.log('ℹ️ Recording chunk downloaded as fallback:', filename);
-    return false;
-  } catch (err) {
-    console.error('❌ failed to save recording chunk', err);
-    return false;
-  }
-}
-
-/**
- * Save accumulated blobs into a single blob and upload / download it.
- */
-async function flushScreenBlobs(username = 'unknown') {
-  if (!EXAM.screenBlobs || EXAM.screenBlobs.length === 0) return;
-  try {
-    const blob = new Blob(EXAM.screenBlobs, { type: 'video/webm' });
-    EXAM.screenBlobs = []; // clear collected blobs
-    const filename = `${username}_screen_${Date.now()}.webm`;
-    await uploadBlobToStorage(blob, filename);
-  } catch (err) {
-    console.warn('flushScreenBlobs failed', err);
-  }
-}
-
-/**
- * Start requesting screen share and record it.
- * Prompts user to share screen; if user denies, the function returns false.
- * Username is used to create chunks filenames.
- */
-async function startScreenRecording(username) {
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
-    console.warn('Screen sharing not supported by this browser.');
-    return false;
-  }
-
-  try {
-    // Request the screen stream (user will see prompt)
-    _screenStream = await navigator.mediaDevices.getDisplayMedia({
-      video: { cursor: 'motion' },
-      audio: false
-    });
-
-    // Keep the stream active by attaching to a hidden video element
-    if (!_hiddenScreenVideo) {
-      _hiddenScreenVideo = document.createElement('video');
-      _hiddenScreenVideo.style.cssText = 'width:1px;height:1px;opacity:0;position:fixed;left:-10000px;top:-10000px;';
-      _hiddenScreenVideo.autoplay = true;
-      _hiddenScreenVideo.muted = true;
-      _hiddenScreenVideo.playsInline = true;
-      document.body.appendChild(_hiddenScreenVideo);
-    }
-    _hiddenScreenVideo.srcObject = _screenStream;
-    try { await _hiddenScreenVideo.play(); } catch (e) { /* ignore play errors */ }
-
-    // Prepare MediaRecorder
-    const options = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? { mimeType: 'video/webm;codecs=vp9' } :
-                    (MediaRecorder.isTypeSupported('video/webm;codecs=vp8') ? { mimeType: 'video/webm;codecs=vp8' } :
-                    { mimeType: 'video/webm' });
-
-    EXAM.screenBlobs = []; // container for blobs
-
-    _screenRecorder = new MediaRecorder(_screenStream, options);
-
-    _screenRecorder.ondataavailable = (ev) => {
-      if (ev && ev.data && ev.data.size > 0) {
-        EXAM.screenBlobs.push(ev.data);
-      }
-    };
-
-    _screenRecorder.onstop = async () => {
-      // flush remaining blobs
-      await flushScreenBlobs(username);
-      // stop tracks
-      if (_screenStream) {
-        _screenStream.getTracks().forEach(t => t.stop());
-        _screenStream = null;
-      }
-      if (_hiddenScreenVideo) {
-        try { _hiddenScreenVideo.pause(); _hiddenScreenVideo.srcObject = null; } catch(e){}
-      }
-      if (_screenChunkTimer) { clearInterval(_screenChunkTimer); _screenChunkTimer = null; }
-      console.log('🛑 Screen recording stopped for', username);
-    };
-
-    // Start recording with small timeslice (we will also flush periodically)
-    _screenRecorder.start(10_000); // request dataavailable events (browser may coalesce)
-
-    // Periodically flush blobs every SCREEN_CHUNK_INTERVAL
-    if (_screenChunkTimer) clearInterval(_screenChunkTimer);
-    _screenChunkTimer = setInterval(() => {
-      // copy current blobs and flush
-      const blobsToFlush = (EXAM.screenBlobs && EXAM.screenBlobs.length) ? EXAM.screenBlobs.splice(0, EXAM.screenBlobs.length) : [];
-      if (blobsToFlush && blobsToFlush.length) {
-        const chunk = new Blob(blobsToFlush, { type: 'video/webm' });
-        const filename = `${username}_screen_chunk_${Date.now()}.webm`;
-        // fire-and-forget upload
-        uploadBlobToStorage(chunk, filename).catch(e => console.warn('Chunk upload failed', e));
-      }
-    }, SCREEN_CHUNK_INTERVAL);
-
-    // Also watch for user stopping the screen share via browser UI (track ended)
-    _screenStream.getVideoTracks().forEach(track => {
-      track.addEventListener('ended', async () => {
-        // stop the recorder if still active
-        try { if (_screenRecorder && _screenRecorder.state !== 'inactive') _screenRecorder.stop(); } catch(e){}
-      });
-    });
-
-    console.log('🟢 Screen recording started for', username);
-    return true;
-  } catch (err) {
-    console.warn('User denied screen share or error occurred:', err);
-    return false;
-  }
-}
-
-/**
- * Stop screen recording gracefully.
- */
-async function stopScreenRecording() {
-  try {
-    if (_screenRecorder && _screenRecorder.state !== 'inactive') {
-      _screenRecorder.stop();
-    } else {
-      // flush and cleanup anyway
-      if (EXAM.screenBlobs && EXAM.screenBlobs.length) {
-        await flushScreenBlobs(EXAM.state && EXAM.state.username ? EXAM.state.username : 'unknown');
-      }
-      if (_screenStream) {
-        _screenStream.getTracks().forEach(t => t.stop());
-        _screenStream = null;
-      }
-      if (_hiddenScreenVideo) {
-        try { _hiddenScreenVideo.pause(); _hiddenScreenVideo.srcObject = null; } catch(e){}
-      }
-      if (_screenChunkTimer) { clearInterval(_screenChunkTimer); _screenChunkTimer = null; }
-    }
-  } catch (err) {
-    console.warn('stopScreenRecording error', err);
-  }
 }
 
 async function loadTimer(username) {
@@ -2450,14 +2234,6 @@ async function submitExam(auto = false) {
   // 🔹 Clear session so user cannot resume
   await _clearSessionAfterSubmit(EXAM.state.username);
   stopPeriodicSessionSave();
-  // === SCREEN RECORDING: stop when exam ends ===
-try {
-  await stopScreenRecording();
-  console.log('Screen recording stopped and final chunk flushed.');
-} catch (err) {
-  console.warn('Error stopping screen recording', err);
-}
-
 
   // 🔹 Show score & redirect
   $('#fsQuestion').innerHTML = `
@@ -4598,5 +4374,4 @@ function hideVisitorMessage() {
 </script>
 </body>
 </html>
-
 
