@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Online MCQ Examination System — Admin</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="wrap card">
+    <div class="header">
+      <div>
+        <div class="brand">Admin — Online MCQ Examination</div>
+        <div class="hint">Admin controls: Questions, Users, Results, Announcements</div>
+      </div>
+      <div class="row">
+        <button class="btn" onclick="window.location.href='user.html'">Back to User</button>
+      </div>
+    </div>
+
+    <!-- ADMIN LOGIN -->
+    <section id="adminLogin">
+      <div class="card">
+        <h3>Admin Login</h3>
+        <label>Admin password</label>
+        <input id="adminPass" type="password" value="">
+        <div class="row" style="margin-top:10px">
+          <button class="btn brand" onclick="handleAdminLogin()">Login</button>
+          <div class="spacer"></div>
+          <div class="small">Made by: <b>Ranjan Kumar</b></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ADMIN PANEL (visible after login) -->
+    <section id="adminPanel" class="hidden">
+      <div class="card">
+        <h3>Questions</h3>
+        <div style="display:flex;gap:12px;align-items:flex-start">
+          <div style="flex:1">
+            <label>Question text</label>
+            <textarea id="qText"></textarea>
+            <div class="row" style="margin-top:8px">
+              <div style="flex:1"><input id="qA" placeholder="Option A"></div>
+              <div style="flex:1"><input id="qB" placeholder="Option B"></div>
+            </div>
+            <div class="row" style="margin-top:8px">
+              <div style="flex:1"><input id="qC" placeholder="Option C"></div>
+              <div style="flex:1"><input id="qD" placeholder="Option D"></div>
+            </div>
+            <div class="row" style="margin-top:8px">
+              <select id="qAnswer">
+                <option value="0">A</option>
+                <option value="1">B</option>
+                <option value="2">C</option>
+                <option value="3">D</option>
+              </select>
+              <input id="qMarks" type="number" placeholder="Marks" style="width:110px" value="1">
+              <select id="qCategory">
+                <option>Synopsis</option>
+                <option>Minor Practical</option>
+                <option>Major Practical</option>
+                <option>Viva</option>
+              </select>
+              <div class="spacer"></div>
+              <button class="btn brand" onclick="saveQuestion()">Save</button>
+            </div>
+          </div>
+
+          <div style="width:360px">
+            <h4>Existing Questions</h4>
+            <div id="adminQuestionsList" class="list"></div>
+          </div>
+        </div>
+      </div>
+
+      <div style="height:12px"></div>
+
+      <!-- Results Card -->
+      <div class="card">
+        <h3>Results</h3>
+        <div class="row">
+          <button class="btn" onclick="renderResults()">Refresh</button>
+          <button class="btn" onclick="exportResultsJSON()">Export results (.json)</button>
+          <button class="btn" onclick="exportResultsCSV()">Export results (.csv)</button>
+          <div class="spacer"></div>
+          <button class="btn danger" onclick="clearResults()">Clear Results</button>
+        </div>
+        <div id="resultsArea" style="margin-top:10px; max-height:360px; overflow:auto"></div>
+      </div>
+
+      <!-- Announcements -->
+      <div class="card" id="adminAnnouncementsCard" style="margin-top:12px">
+        <h3>Announcements — Broadcast to all students</h3>
+        <label>Write announcement</label>
+        <textarea id="adminAnnText" placeholder="Type message to broadcast (short)"></textarea>
+        <div class="row" style="margin-top:8px">
+          <button class="btn brand" onclick="sendAnnouncement()">Send to all</button>
+          <button class="btn" onclick="clearAnnouncementBox()">Clear</button>
+          <div class="spacer"></div>
+          <div class="small">Messages appear in students' top banner instantly.</div>
+        </div>
+
+        <div style="height:8px"></div>
+        <label>Recent announcements</label>
+        <div id="adminAnnList" class="list" style="max-height:180px; overflow:auto">
+          <div class="small">No announcements yet.</div>
+        </div>
+      </div>
+
+      <!-- Import / Export -->
+      <div class="card" style="margin-top:12px">
+        <h3>Import / Export</h3>
+        <div class="row">
+          <div style="flex:1">
+            <label>Import Users (JSON file)</label>
+            <input id="impUsersFile" type="file" accept="application/json" onchange="importUsersFile(event)">
+          </div>
+          <div style="width:220px">
+            <label>Import Questions (.json)</label>
+            <input id="impQFile" type="file" accept="application/json" onchange="importQuestionsFile(event)">
+          </div>
+        </div>
+        <div style="height:12px"></div>
+        <div class="row">
+          <button class="btn" onclick="exportSettings()">Export Settings</button>
+          <button class="btn" onclick="triggerImportSettings()">Import Settings</button>
+          <div class="spacer"></div>
+          <button class="btn warn" onclick="downloadBackup()">Download Full Backup (.json)</button>
+          <button class="btn" onclick="updateBackup()">Update Full Backup</button>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <label class="btn">Import Full Backup (.json)
+            <input type="file" id="importBackupFile" accept="application/json" style="display:none" onchange="importFullBackup(this.files[0])">
+          </label>
+        </div>
+      </div>
+
+    </section>
+  </div>
+
+  <script type="module" src="app-shared.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', ()=> {
+      showSection('adminLogin');
+    });
+  </script>
+</body>
+</html>
