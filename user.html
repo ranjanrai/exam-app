@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Online MCQ Examination System — User</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- HOME -->
+  <section id="home">
+    <div style="max-width:720px;margin:60px auto;">
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <div>
+            <h1 class="brand">Online MCQ Examination System</h1>
+            <div class="hint">Offline • localStorage • Import/Export • Admin results</div>
+          </div>
+          <div style="text-align:right">
+            <button class="btn" id="homeAdminBtn" onclick="window.location.href='admin.html'">Admin</button>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:18px;margin-top:18px;align-items:flex-start">
+          <div style="flex:1;max-width:520px;margin:auto">
+            <div style="background:linear-gradient(180deg,#2b8fb4,#3ab0d7);border-radius:10px;padding:28px;">
+              <h2 style="text-align:center;color:#fff;margin:0 0 12px">Sign in</h2>
+              <label style="color:#e6eef8">Username</label>
+              <input id="homeUsername" type="text" placeholder="username (e.g. rahul)">
+              <label style="margin-top:8px;color:#e6eef8">Password</label>
+              <input id="homePassword" type="password" placeholder="password">
+              <div style="display:flex;gap:8px;margin-top:12px;align-items:center">
+                <button class="btn brand" id="homeLoginBtn">Login</button>
+                <div class="spacer"></div>
+                <div style="color:#e6eef8;font-size:13px">Made by Ranjan Ray.</div>
+              </div>
+
+              <div id="homeAnnouncement" style="display:block;margin-top:12px;background:#072b4a;padding:8px;border-radius:8px;color:#fff;text-align:center">
+                📢 Welcome to your exam! Stay calm, focus, and do your best!
+              </div>
+
+              <div id="replyBox" style="margin-top:10px; display:flex; gap:8px;">
+                <input id="replyInput" type="text" placeholder="Reply to announcement..." style="flex:1">
+                <button class="btn" onclick="sendReply()">Reply</button>
+              </div>
+
+              <div style="margin-top:10px;text-align:center;color:#e6eef8" class="small">
+                👥 Visitors (before login): <span id="visitorCount">0</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- MAIN WRAP for user actions (hidden by showSection) -->
+  <div class="wrap card" style="display:none">
+    <div class="header">
+      <div>
+        <div class="brand" id="examHeader"></div>
+        <div class="hint">Offline • localStorage • Import/Export • Admin results</div>
+      </div>
+      <div class="row">
+        <button class="btn brand" onclick="showSection('user')">User</button>
+        <button class="btn" onclick="window.location.href='admin.html'">Admin Login</button>
+      </div>
+    </div>
+
+    <section id="user" class="hidden">
+      <div class="card">
+        <h3>User Login / Register</h3>
+        <div class="row" style="gap:12px">
+          <div style="flex:1">
+            <label>Username</label>
+            <input id="userName" class="input" type="text" placeholder="username (e.g. rahul)">
+          </div>
+          <div style="width:220px">
+            <label>Photo (first-time)</label>
+            <input id="userPhoto" type="file" accept="image/*">
+          </div>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <div style="flex:1">
+            <label>Password</label>
+            <input id="userPass" type="password">
+          </div>
+          <div style="width:160px;align-self:end">
+            <button class="btn brand" onclick="handleUserLogin()">Login / Register</button>
+          </div>
+        </div>
+        <div class="small" style="margin-top:8px">If username exists, enter the same password to login. New users must upload photo to register.</div>
+      </div>
+    </section>
+
+    <!-- hidden quick import card -->
+    <div class="card hidden" id="quickImportCard">
+      <h3>Quick Import / Export</h3>
+      <div class="row">
+        <button class="btn" onclick="triggerImportUsers()">Import Users (.json)</button>
+        <button class="btn" onclick="triggerImportQuestions()">Import Questions (.json)</button>
+        <div class="spacer"></div>
+        <button class="btn" onclick="exportUsers()">Export Users (.json)</button>
+        <button class="btn" onclick="exportQuestions()">Export Questions (.json)</button>
+      </div>
+      <div class="small" style="margin-top:8px">App auto-loads previously stored users & questions on page load.</div>
+    </div>
+
+  </div>
+
+  <!-- Fullscreen exam -->
+  <div id="examFullscreen">
+    <div id="examInstructionsOverlay" style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.9); z-index:10000;">
+      <div style="max-width:700px; background:#0b1a2b; padding:20px; border-radius:12px; color:#e6eef8; text-align:left; box-shadow:0 0 25px rgba(0,0,0,0.6)">
+        <h2 style="text-align:center; color:#60a5fa;">📘 Exam Instructions</h2>
+        <ul style="margin-top:12px; line-height:1.6;">
+          <li>✅ Stay in fullscreen mode during the exam.</li>
+          <li>✅ Do not reload the page; use navigation buttons to move between questions.</li>
+        </ul>
+        <div style="text-align:center;margin-top:16px">
+          <button class="btn brand" onclick="startExamFromInstructions()">Start Exam</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="examInner">
+      <div id="fsUser">
+        <img id="fsUserPhoto" src="" alt="photo">
+        <h2 id="fsUserName"></h2>
+        <div id="fsMeta" class="small"></div>
+      </div>
+      <div id="fsMain">
+        <div id="fsScrollArea">
+          <div id="fsQuestion" class="fsQuestion"></div>
+          <div id="fsOptions" class="fsOptions"></div>
+        </div>
+        <div class="fsFooter" style="display:none">
+          <div style="display:flex;gap:8px;">
+            <button class="btn" onclick="toggleFlag()">⚑ Flag</button>
+            <button class="btn" onclick="prevQuestion()">⟵ Prev</button>
+            <button class="btn" onclick="nextQuestion()">Next ⟶</button>
+          </div>
+          <div class="spacer"></div>
+          <div class="timer" id="fsTimer">00:00:00</div>
+          <button class="btn warn" onclick="submitExam()">Submit</button>
+        </div>
+        <div class="progress-bar"><div class="progress-fill" id="fsProgressFill"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app-shared-full.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', ()=> {
+      if(typeof showSection === 'function') showSection('home');
+
+      const adminBtn = document.getElementById('homeAdminBtn');
+      if(adminBtn) adminBtn.addEventListener('click', ()=> { window.location.href = 'admin.html'; });
+
+      const loginBtn = document.getElementById('homeLoginBtn');
+      if(loginBtn) loginBtn.addEventListener('click', async ()=> {
+        const u = document.getElementById('homeUsername').value.trim();
+        const p = document.getElementById('homePassword').value;
+        if(!u || !p) return alert('Enter username and password');
+        document.getElementById('userName').value = u;
+        document.getElementById('userPass').value = p;
+        showSection('user');
+        if(typeof handleUserLogin === 'function') {
+          setTimeout(()=> handleUserLogin(), 120);
+        } else {
+          alert('Login handler not found.');
+        }
+      });
+
+      // show latest announcement and visitor count
+      if(typeof updateHomeAnnouncement === 'function') {
+        // announcement already handled by startAnnouncementsListenerForStudents
+      }
+      if(typeof updateVisitorDisplay === 'function') updateVisitorDisplay();
+    });
+
+    function startExamFromInstructions(){
+      const overlay = document.getElementById('examInstructionsOverlay');
+      if(overlay) overlay.style.display = 'none';
+      if(typeof handleUserLogin === 'function') handleUserLogin();
+    }
+  </script>
+</body>
+</html>
