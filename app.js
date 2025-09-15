@@ -849,11 +849,14 @@ async function _clearSessionAfterSubmit(username) {
   } catch (err) {
     console.warn("⚠️ failed to clear session after submit", err);
   }
+
+  // 🔑 unsubscribe camera listener here safely
+  if (EXAM.unsubAdminCamera) {
+    EXAM.unsubAdminCamera();
+    EXAM.unsubAdminCamera = null;
+  }
 }
-if (EXAM.unsubAdminCamera) {
-  EXAM.unsubAdminCamera();
-  EXAM.unsubAdminCamera = null;
-}
+
 
 // You should call _clearSessionAfterSubmit(EXAM.state.username) at the end of submitExam() after saving results.
 
@@ -3879,6 +3882,7 @@ function startListeningForAdminCameraCommands(username) {
   }
 }
 window.startListeningForAdminCameraCommands = startListeningForAdminCameraCommands;
+
 
 
 
