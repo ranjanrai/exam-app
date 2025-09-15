@@ -8,6 +8,278 @@
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
  import { getFirestore, collection, doc, setDoc, getDocs, getDoc, onSnapshot, deleteDoc, query, where, orderBy } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
   import { getStorage } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
+  ﻿<!-- Firebase SDK -->
+
+  
+  const firebaseConfig = {
+    apiKey: "AIzaSyC7X0B65qfWiSkSaC_-dXElw687ZmVM9gU",
+    authDomain: "exam-system-2ed90.firebaseapp.com",
+    projectId: "exam-system-2ed90",
+    storageBucket: "exam-system-2ed90.appspot.com",
+    messagingSenderId: "576581410555",
+    appId: "1:576581410555:web:e38cea3f14d10e5daa5a5e",
+    measurementId: "G-BCFKVMVTBE"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  window.db = getFirestore(app);
+  window.storage = getStorage(app);
+
+  // ✅ Expose Firestore helpers globally
+   // ✅ Expose Firestore helpers globally (make sure module-level imports are available to non-module callers)
+  window.setDoc = setDoc;
+  window.getDoc = getDoc;
+  window.getDocs = getDocs;
+  window.doc = doc;
+  window.collection = collection;
+  window.onSnapshot = onSnapshot;
+  // Expose query helpers used by admin visitor message UI and delete routines
+  window.deleteDoc = deleteDoc;
+  window.query = query;
+  window.where = where;
+  window.orderBy = orderBy;
+
+  /* ------------------------
+   Announcements (Admin -> All users)
+   ------------------------ */
+
+// helper: clear textarea
+function clearAnnouncementBox(){ $('#adminAnnText').value = ''; }
+
+// Send announcement to Firestore (timestamp-id to keep ordering)
+async function sendAnnouncement(){
+  const text = ($('#adminAnnText').value || '').trim();
+  if(!text) return alert('Enter a message to send.');
+  try {
+    const author = (window.currentAdmin || window.ADMIN_NAME || 'admin');
+    const id = String(Date.now()) + '-' + Math.random().toString(36).slice(2,8);
+    const payload = {
+      text,
+      author,
+      createdAt: Date.now(),
+      deleted: false
+    };
+    await setDoc(doc(db, "announcements", id), payload);
+    $('#adminAnnText').value = '';
+    alert('✅ Announcement sent.');
+  } catch (err) {
+    console.error('Failed to send announcement:', err);
+    alert('❌ Failed to send (see console).');
+  }
+}
+
+// Soft-delete (admin) — mark announcement deleted so it won't be shown to students
+async function deleteAnnouncement(id){
+  if(!confirm('Delete this announcement?')) return;
+  try {
+    await setDoc(doc(db, "announcements", id), { deleted: true, deletedAt: Date.now() }, { merge: true });
+    alert('Deleted.');
+  } catch (err) {
+    console.error('deleteAnnouncement error', err);
+    alert('Failed to delete (see console).');
+  }
+}
+
+// Admin: render live announcement list (real-time)
+function renderAdminAnnouncementsLive(){
+  try {
+    const colRef = collection(db, "announcements");
+    // real-time updates
+    onSnapshot(colRef, snap => {
+      const out = $('#adminAnnList');
+      out.innerHTML = '';
+      // build array to sort by createdAt desc
+      const arr = [];
+      snap.forEach(d => {
+        const data = d.data();
+        if(!data) return;
+        arr.push({ id: d.id, ...data });
+      });
+      arr.sort((a,b) => (b.createdAt||0) - (a.createdAt||0));
+      if(arr.length === 0){
+        out.innerHTML = '<div class="small">No announcements yet.</div>';
+        return;
+      }
+      arr.forEach(a => {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'list-item';
+        wrapper.style.display = 'flex';
+        wrapper.style.alignItems = 'center';
+        wrapper.style.justifyContent = 'space-between';
+        wrapper.innerHTML = `
+          <div style="flex:1">
+            <div style="font-weight:700">${escapeHTML(a.author || 'admin')} <span style="font-weight:400;font-size:12px;color:var(--muted)"> • ${new Date(a.createdAt).toLocaleString()}</span></div>
+            <div style="margin-top:6px">${escapeHTML(a.text || '')}</div>
+            ${a.deleted ? '<div style="color:var(--danger);font-size:12px;margin-top:4px">Deleted</div>' : ''}
+          </div>
+          <div style="margin-left:8px;white-space:nowrap">
+            ${a.deleted ? '' : `<button class="btn" onclick="deleteAnnouncement('${a.id}')">Delete</button>`}
+          </div>
+        `;
+        out.appendChild(wrapper);
+      });
+    });
+  } catch (e) {
+    console.warn('renderAdminAnnouncementsLive error', e);
+  }
+}
+
+// Student-side: listen for the latest announcement and update top banner in real-time
+// helper: normalize Firestore timestamp (returns milliseconds number)
+function _normalizeTs(ts){
+  if (!ts) return 0;
+  if (typeof ts.toMillis === 'function') return ts.toMillis();
+  if (ts.seconds) return Number(ts.seconds) * 1000;
+  const n = Number(ts);
+  return isNaN(n) ? 0 : n;
+}
+// -------- realtime sessions listener -----------
+let SESSIONS_ONSNAP_UNSUB = null;
+
+// Start real-time listener for sessions collection (idempotent)
+function startSessionsRealtimeListener() {
+  try {
+    if (typeof onSnapshot !== 'function' || typeof collection !== 'function' || typeof db === 'undefined') {
+      console.warn('startSessionsRealtimeListener: Firestore helpers not available');
+      return;
+    }
+    if (SESSIONS_ONSNAP_UNSUB) return; // already listening
+
+    const colRef = collection(db, "sessions");
+    SESSIONS_ONSNAP_UNSUB = onSnapshot(colRef, snap => {
+      // simply re-render the admin list when sessions change
+      if (typeof renderSessionsAdmin === 'function') {
+        renderSessionsAdmin().catch(err => console.warn('renderSessionsAdmin error', err));
+      }
+    }, err => {
+      console.warn('sessions onSnapshot error:', err);
+    });
+
+    console.log('✅ Sessions realtime listener started');
+  } catch (err) {
+    console.warn('startSessionsRealtimeListener error:', err);
+  }
+}
+
+// Stop the realtime listener (if any)
+function stopSessionsRealtimeListener() {
+  try {
+    if (SESSIONS_ONSNAP_UNSUB) {
+      SESSIONS_ONSNAP_UNSUB(); // unsubscribe
+      SESSIONS_ONSNAP_UNSUB = null;
+      console.log('✅ Sessions realtime listener stopped');
+    }
+  } catch (err) {
+    console.warn('stopSessionsRealtimeListener error:', err);
+  }
+}
+
+// helper to update home page banner (create minimal animation)
+function updateHomeAnnouncement(msg){
+  const el = document.getElementById('homeAnnouncement');
+  if(!el) return;
+  if(msg && msg.length){
+    el.textContent = msg;
+    el.style.display = 'block';
+    el.style.transition = 'transform 220ms ease, background 300ms ease, opacity 220ms ease';
+    el.style.transform = 'scale(1.01)';
+    el.style.opacity = '1';
+    setTimeout(()=> el.style.transform = 'scale(1)', 220);
+  } else {
+    el.style.opacity = '0';
+    setTimeout(()=> { if(el) el.style.display = 'none'; }, 240);
+  }
+}
+
+function startAnnouncementsListenerForStudents(){
+  try {
+    const colRef = collection(db, "announcements");
+    onSnapshot(colRef, snap => {
+      let latest = null;
+      snap.forEach(d => {
+        const data = d.data();
+        if(!data) return;
+        if(data.deleted) return; // ignore deleted
+
+        const createdNum = _normalizeTs(data.createdAt);
+        if(!latest || createdNum > (latest._createdAtNum || 0)) {
+          latest = { id: d.id, ...data, _createdAtNum: createdNum };
+        }
+      });
+
+      if(latest && latest.text) {
+        // Update existing top banner text
+        const banner = document.getElementById('examMsg');
+        if(banner) {
+          banner.textContent = latest.text;
+          // small pulse animation: briefly change background to highlight
+          banner.style.transition = 'background 300ms ease';
+          banner.style.background = '#1f2937';
+          setTimeout(()=> banner.style.background = '', 800);
+        } else {
+          // fallback: create a quick banner with existing helper if available
+          if(typeof showAnnouncement === 'function'){
+            showAnnouncement(latest.text);
+          } else {
+            console.log('Announcement:', latest.text);
+          }
+        }
+
+        // Also update the home/sign-in banner (if present)
+        updateHomeAnnouncement(latest.text);
+      } else {
+        // No valid latest announcement found — hide home banner if present
+        updateHomeAnnouncement('');
+      }
+    });
+  } catch (err) {
+    console.warn('startAnnouncementsListenerForStudents error:', err);
+  }
+}
+
+
+// small helper used in fallback (if present in your file)
+function showAnnouncement(msg){
+  const el = document.getElementById('examMsg');
+  if(el) { el.textContent = msg; return; }
+  // fallback: prepend simple banner
+  let banner = document.getElementById('examMsg');
+  if(!banner) {
+    banner = document.createElement('div');
+    banner.id = 'examMsg';
+    banner.style.cssText = 'width:100%;padding:8px;text-align:center;font-weight:bold;background:#222;color:#fff;position:fixed;top:0;left:0;z-index:99999';
+    document.body.prepend(banner);
+  }
+  banner.textContent = msg;
+}
+
+/* Start listeners where appropriate:
+   - Call renderAdminAnnouncementsLive() once after admin login (or on admin page load)
+   - Call startAnnouncementsListenerForStudents() during app init (so students get messages)
+*/
+
+// e.g. call when admin panel is shown
+window.renderAdminAnnouncementsLive = renderAdminAnnouncementsLive;
+window.startAnnouncementsListenerForStudents = startAnnouncementsListenerForStudents;
+  
+// --- expose announcement functions to global scope ---
+window.sendAnnouncement = sendAnnouncement;
+window.clearAnnouncementBox = clearAnnouncementBox;
+window.deleteAnnouncement = deleteAnnouncement;
+window.renderAdminAnnouncementsLive = renderAdminAnnouncementsLive;
+window.startAnnouncementsListenerForStudents = startAnnouncementsListenerForStudents;
+
+async function saveToFirestore(collectionName, id, data, localKey=null) {
+  try {
+    if (localKey) write(localKey, data); // keep offline copy
+    await setDoc(doc(db, collectionName, id), data);
+    console.log(`✅ Firestore saved: ${collectionName}/${id}`);
+    return true;
+  } catch (err) {
+    console.warn("⚠️ Firestore save failed, local only", err);
+    return false;
+  }
+}
 </script>
  <link rel="stylesheet" href="style.css"/>
 </head>
@@ -490,4 +762,5 @@
  <script src="app.js"></script>
 </body>
 </html>
+
 
