@@ -1953,6 +1953,8 @@ async function renderSessionsAdmin() {
     const viewBtn = makeBtn('View', 'btn', () => (typeof adminViewSession === 'function' ? adminViewSession(sessId) : alert('View not available')));
     const clearBtn = makeBtn('Clear', 'btn', () => (typeof adminForceClearSession === 'function' ? adminForceClearSession(sessId) : alert('Clear not available')));
     const deleteBtn = makeBtn('Delete', 'btn danger', () => (typeof adminDeleteSession === 'function' ? adminDeleteSession(sessId) : alert('Delete not available')));
+    <button class="btn" onclick="adminWatchStudent('studentUsername')">View Camera</button>
+
     const screenBtn = makeBtn('View Screen', 'btn warn', () => viewUserScreen(sessId));
     actions.appendChild(screenBtn);
 
@@ -1979,6 +1981,126 @@ async function renderSessionsAdmin() {
     wrapper.appendChild(actions);
     out.appendChild(wrapper);
   });
+
+  // ---------- WebRTC (admin) ----------
+// Call this from admin UI (e.g., button next to session in admin list)
+// username = the student's username / session id
+async function adminWatchStudent(username) {
+  if (!username) return alert('No username provided');
+
+  try {
+    // create peer connection
+    const pc = new RTCPeerConnection(RTC_CONFIG);
+    window._adminPC = pc;
+
+    // create or find admin video element
+    let adminVideo = document.getElementById('adminRemoteVideo');
+    if (!adminVideo) {
+      adminVideo = document.createElement('video');
+      adminVideo.id = 'adminRemoteVideo';
+      adminVideo.autoplay = true;
+      adminVideo.playsInline = true;
+      adminVideo.style.width = '320px';
+      adminVideo.style.height = '240px';
+      adminVideo.style.objectFit = 'cover';
+      // append to admin panel container
+      const adminPanel = document.getElementById('adminPanel') || document.body;
+      adminPanel.appendChild(adminVideo);
+    }
+
+    // when remote track arrives, attach to video element
+    pc.ontrack = (ev) => {
+      adminVideo.srcObject = ev.streams[0];
+      adminVideo.play().catch(()=>{});
+    };
+
+    // admin ICE -> store in calleeCandidates subcollection
+    pc.onicecandidate = async (event) => {
+      if (!event.candidate) return;
+      const id = uid();
+      try {
+        await setDoc(doc(db, `webrtc/${username}/calleeCandidates/${id}`), { candidate: event.candidate.toJSON(), createdAt: Date.now() });
+      } catch (err) {
+        console.warn('admin: failed to write callee candidate', err);
+      }
+    };
+
+    // fetch the offer from Firestore
+    const roomRef = doc(db, 'webrtc', username);
+    const snap = await getDoc(roomRef);
+    if (!snap.exists()) {
+      alert('No active stream found for ' + username);
+      return;
+    }
+    const data = snap.data();
+    if (!data.offer) {
+      alert('No offer found for ' + username);
+      return;
+    }
+
+    // set remote description (student offer)
+    await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+
+    // create answer
+    // optionally, you can add audio receiving: we are not sending own tracks by default
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+
+    // write answer to Firestore doc
+    await setDoc(roomRef, { answer: { type: pc.localDescription.type, sdp: pc.localDescription.sdp }, answeredAt: Date.now() }, { merge: true });
+
+    // listen for caller (student) ICE candidates and add them
+    const callerCol = collection(db, `webrtc/${username}/callerCandidates`);
+    const unsubCaller = onSnapshot(callerCol, snap => {
+      snap.docChanges().forEach(async change => {
+        if (change.type === 'added') {
+          const c = change.doc.data()?.candidate;
+          if (!c) return;
+          try {
+            await pc.addIceCandidate(new RTCIceCandidate(c));
+          } catch (err) {
+            console.warn('admin addIceCandidate failed', err);
+          }
+        }
+      });
+    });
+
+    // Also optionally listen and react to doc changes (e.g., student cleared session)
+    const unsubRoom = onSnapshot(roomRef, s => {
+      const d = s.exists() ? s.data() : null;
+      if (!d) return;
+      if (d.clearedAt) {
+        // student ended stream
+        // cleanup automatically
+        try { unsubCaller(); } catch(e){}
+        try { unsubRoom(); } catch(e){}
+        try { pc.close(); } catch(e){}
+      }
+    });
+
+    // persist unsub so admin can stop later
+    window._admin_webrtc = { pc, unsubCaller, unsubRoom, roomRef };
+
+    console.log('📡 Admin watching', username);
+  } catch (err) {
+    console.error('adminWatchStudent error', err);
+    alert('Failed to start remote watch: ' + err.message);
+  }
+}
+
+// Call this to stop watching
+async function adminStopWatching() {
+  try {
+    if (window._admin_webrtc) {
+      const { pc, unsubCaller, unsubRoom } = window._admin_webrtc;
+      try { if (unsubCaller) unsubCaller(); } catch(e){}
+      try { if (unsubRoom) unsubRoom(); } catch(e){}
+      try { if (pc) pc.close(); } catch(e){}
+      window._admin_webrtc = null;
+    }
+  } catch (err) { console.warn('adminStopWatching error', err); }
+}
+
 // --- add live-count badge update (paste at end of renderSessionsAdmin) ---
 (function updateLiveCountBadge(sessionsArr) {
   try {
@@ -3425,67 +3547,136 @@ function hideVisitorMessage() {
   if (span) span.textContent = "";
 }
 
-/* ---------------- LIVE SCREEN STREAMING ---------------- */
+// ---------- WebRTC (student) ----------
+// STUN servers (public)
+const RTC_CONFIG = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
-// Firestore collections for signaling
-const screenSignals = collection(db, "screenSignals");
-
-/* ---------------- HYBRID EXAM STREAMING ---------------- */
-
+// call this when exam starts (you already call startExamStream(username))
 async function startExamStream(username) {
-  let stream;
-  try {
-    stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-  } catch (err) {
-    console.warn("Screen share not available, falling back to camera:", err);
-    stream = await navigator.mediaDevices.getUserMedia({ video: true });
+  if (!username) {
+    console.warn('startExamStream: no username');
+    return;
   }
+  try {
+    // 1) get camera permission & stream
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false });
+    window.currentStream = stream;
 
-  const pc = new RTCPeerConnection({
-    iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
-  });
-
-  stream.getTracks().forEach(track => pc.addTrack(track, stream));
-
-  // Create Firestore doc
-  const callDoc = doc(collection(db, "screenSignals"), username);
-  const offerCandidates = collection(callDoc, "offerCandidates");
-  const answerCandidates = collection(callDoc, "answerCandidates");
-
-  // Save local ICE
-  pc.onicecandidate = event => {
-    if (event.candidate) {
-      addDoc(offerCandidates, event.candidate.toJSON());
+    // show a local preview inside the exam UI (replace/attach to an element you prefer)
+    let localPreview = document.getElementById('localPreviewVideo');
+    if (!localPreview) {
+      localPreview = document.createElement('video');
+      localPreview.id = 'localPreviewVideo';
+      localPreview.autoplay = true;
+      localPreview.muted = true;
+      localPreview.style.width = '160px';
+      localPreview.style.height = '120px';
+      localPreview.style.objectFit = 'cover';
+      // append somewhere sensible: to #fsUser or exam UI
+      const fsUser = document.getElementById('fsUser') || document.body;
+      fsUser.appendChild(localPreview);
     }
-  };
+    localPreview.srcObject = stream;
 
-  // Create and set offer
-  const offerDescription = await pc.createOffer();
-  await pc.setLocalDescription(offerDescription);
+    // 2) create peer connection
+    const pc = new RTCPeerConnection(RTC_CONFIG);
+    window._studentPC = pc;
 
-  await setDoc(callDoc, { offer: { sdp: offerDescription.sdp, type: offerDescription.type } });
+    // add local tracks
+    stream.getTracks().forEach(track => pc.addTrack(track, stream));
 
-  // Listen for answer
-  onSnapshot(callDoc, async snap => {
-    const data = snap.data();
-    if (!pc.currentRemoteDescription && data?.answer) {
-      const answerDescription = new RTCSessionDescription(data.answer);
-      await pc.setRemoteDescription(answerDescription);
-    }
-  });
+    // Create Firestore doc for signaling
+    const roomRef = doc(db, 'webrtc', username); // doc path: webrtc/{username}
+    // Remove any previous data (merge false) to start fresh for this username
+    try { await setDoc(roomRef, { createdAt: Date.now() }); } catch (e) {}
 
-  // Listen for answer ICE
-  onSnapshot(answerCandidates, snap => {
-    snap.docChanges().forEach(change => {
-      if (change.type === "added") {
-        const candidate = new RTCIceCandidate(change.doc.data());
-        pc.addIceCandidate(candidate);
+    // ICE candidate -> store to callerCandidates subcollection
+    pc.onicecandidate = async (event) => {
+      if (!event.candidate) return;
+      const id = uid();
+      try {
+        await setDoc(doc(db, `webrtc/${username}/callerCandidates/${id}`), { candidate: event.candidate.toJSON(), createdAt: Date.now() });
+      } catch (err) {
+        console.warn('Failed to write caller candidate', err);
+      }
+    };
+
+    // Optional: show remote tracks if admin sends any (not needed here, but kept)
+    pc.ontrack = (ev) => {
+      const remoteVideo = document.getElementById('remoteVideo');
+      if (remoteVideo) {
+        // if admin forwards something back, attach it
+        remoteVideo.srcObject = ev.streams[0];
+        remoteVideo.play().catch(()=>{});
+      }
+    };
+
+    // 3) create offer and save to Firestore
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+
+    const payload = {
+      offer: { type: offer.type, sdp: offer.sdp },
+      createdAt: Date.now(),
+      username
+    };
+    await setDoc(roomRef, payload, { merge: true });
+
+    // 4) listen for answer
+    const unsubAnswer = onSnapshot(roomRef, snap => {
+      const data = snap.exists() ? snap.data() : null;
+      if (!data) return;
+      if (data.answer && !pc.currentRemoteDescription) {
+        const answerDesc = new RTCSessionDescription(data.answer);
+        pc.setRemoteDescription(answerDesc).catch(e => console.warn('setRemoteDescription failed', e));
       }
     });
-  });
 
-  console.log("📡 Stream started for", username);
+    // 5) listen for callee (admin) ICE candidates (admin -> student)
+    const calleeCandRef = doc(db, `webrtc/${username}`); // we will watch subcollection
+    const unsubCallee = onSnapshot(collection(db, `webrtc/${username}/calleeCandidates`), snap => {
+      snap.docChanges().forEach(async change => {
+        if (change.type === 'added') {
+          const c = change.doc.data()?.candidate;
+          if (!c) return;
+          try {
+            await pc.addIceCandidate(new RTCIceCandidate(c));
+          } catch (err) {
+            console.warn('addIceCandidate failed (student)', err);
+          }
+        }
+      });
+    });
+
+    // store unsubscribe functions so we can clean up
+    window._student_webrtc = { pc, unsubAnswer, unsubCallee, roomRef };
+
+    console.log('🎥 Student WebRTC started for', username);
+  } catch (err) {
+    console.error('startExamStream error:', err);
+    alert('Could not access camera. Please allow camera permission in your browser settings.');
+  }
 }
+
+// Call this to stop streaming & cleanup (call when exam ends or on logout)
+async function stopExamStream(username) {
+  try {
+    if (window._student_webrtc) {
+      const { pc, unsubAnswer, unsubCallee, roomRef } = window._student_webrtc;
+      try { if (unsubAnswer) unsubAnswer(); } catch(e){}
+      try { if (unsubCallee) unsubCallee(); } catch(e){}
+      try { if (pc) pc.close(); } catch(e){}
+      window._student_webrtc = null;
+    }
+    if (window.currentStream) {
+      window.currentStream.getTracks().forEach(t => t.stop());
+      window.currentStream = null;
+    }
+    // optionally clear signaling doc so admin no longer sees it
+    try { await setDoc(doc(db, 'webrtc', username), { clearedAt: Date.now() }, { merge: true }); } catch (e){}
+  } catch (err) { console.warn('stopExamStream error', err); }
+}
+
 
 async function viewUserScreen(username) {
   const pc = new RTCPeerConnection({
@@ -3538,6 +3729,7 @@ async function viewUserScreen(username) {
   document.getElementById("streamUserLabel").textContent = username;
   document.getElementById("streamViewer").classList.remove("hidden");
 }
+
 
 
 
