@@ -1,4 +1,14 @@
-
+async function saveToFirestore(collectionName, id, data, localKey=null) {
+  try {
+    if (localKey) write(localKey, data); // keep offline copy
+    await setDoc(doc(db, collectionName, id), data);
+    console.log(`✅ Firestore saved: ${collectionName}/${id}`);
+    return true;
+  } catch (err) {
+    console.warn("⚠️ Firestore save failed, local only", err);
+    return false;
+  }
+}
 /* -------------------------
    Storage keys & defaults
    ------------------------- */
@@ -3410,6 +3420,7 @@ function hideVisitorMessage() {
   const span = document.getElementById("visitorMsgText");
   if (span) span.textContent = "";
 }
+
 
 
 
