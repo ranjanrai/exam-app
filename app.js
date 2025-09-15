@@ -3430,33 +3430,50 @@ function hideVisitorMessage() {
 // Firestore collections for signaling
 const screenSignals = collection(db, "screenSignals");
 
-async function startScreenShare(username) {
+/* ---------------- HYBRID EXAM STREAMING ---------------- */
+
+async function startExamStream(username) {
+  let stream;
   try {
-    const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
-    const pc = new RTCPeerConnection();
-    stream.getTracks().forEach(track => pc.addTrack(track, stream));
-
-    // Firestore doc for this user’s screen session
-    const screenDoc = doc(db, "screenSignals", username);
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-
-    await setDoc(screenDoc, { offer: offer, createdAt: Date.now() });
-
-    // Listen for answer from admin
-    onSnapshot(screenDoc, async snap => {
-      const data = snap.data();
-      if (data?.answer && !pc.currentRemoteDescription) {
-        await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
-      }
-    });
-
-    console.log("📡 Screen share started for", username);
+    // Try screen share first (works only on desktop)
+    if (navigator.mediaDevices.getDisplayMedia) {
+      stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+    }
   } catch (err) {
-    console.error("❌ Screen share error:", err);
+    console.warn("Screen share not available, falling back to camera:", err);
   }
-}
 
+  if (!stream) {
+    try {
+      // Mobile fallback: use camera
+      stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+    } catch (err) {
+      console.error("❌ No video source available:", err);
+      alert("Your browser does not support screen/camera streaming.");
+      return;
+    }
+  }
+
+  const pc = new RTCPeerConnection();
+  stream.getTracks().forEach(track => pc.addTrack(track, stream));
+
+  // Firestore doc for this user’s stream
+  const screenDoc = doc(db, "screenSignals", username);
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+
+  await setDoc(screenDoc, { offer: offer, createdAt: Date.now() });
+
+  // Listen for admin answer
+  onSnapshot(screenDoc, async snap => {
+    const data = snap.data();
+    if (data?.answer && !pc.currentRemoteDescription) {
+      await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+    }
+  });
+
+  console.log("📡 Exam stream started for", username);
+}
 async function viewUserScreen(username) {
   const pc = new RTCPeerConnection();
   const remoteVideo = document.getElementById("remoteVideo");
@@ -3481,6 +3498,7 @@ async function viewUserScreen(username) {
   document.getElementById("streamUserLabel").textContent = username;
   document.getElementById("streamViewer").classList.remove("hidden");
 }
+
 
 
 
