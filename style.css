@@ -189,3 +189,7 @@ min-height:80px
     padding: 0;
   }
 }
+#remoteVideo {
+  background: black;
+  border: 2px solid var(--brand);
+}
