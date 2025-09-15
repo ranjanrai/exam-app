@@ -2120,12 +2120,12 @@ window.adminUnlockSession = adminUnlockSession; // expose globally for the inlin
 
 // Auto-refresh toggle handler: call render every 5s when checked
 // DOM ready: wire auto-refresh toggle + admin proctor buttons
+// DOM ready: wire auto-refresh toggle + admin proctor buttons
 document.addEventListener('DOMContentLoaded', () => {
   // --- Auto-refresh toggle ---
   try {
     const cb = document.getElementById('adminAutoRefreshSessions');
     if (cb) {
-      // restore from existing interval value if any
       if (typeof SESSIONS_AUTO_REFRESH_ID === 'undefined') window.SESSIONS_AUTO_REFRESH_ID = null;
       cb.addEventListener('change', () => {
         if (cb.checked) {
@@ -2155,24 +2155,20 @@ document.addEventListener('DOMContentLoaded', () => {
     console.warn('Admin proctor button wiring failed:', e);
   }
 
-  // --- Optional: when a session row is clicked, auto-fill username and start watching ---
-  // This assumes your session rows have class "session-row" and attribute data-username.
-  // If you don't have such rows, this block does nothing.
+  // --- Optional: session-row click to auto-fill username + watch ---
   try {
     document.querySelectorAll && document.querySelectorAll('.session-row[data-username]').forEach(el => {
       el.addEventListener('click', () => {
         const u = el.getAttribute('data-username');
         const input = document.getElementById('adminWatchUsername');
         if (input) input.value = u;
-        // Small delay so UI updates before starting
         setTimeout(() => adminStartWatch(u), 120);
       });
     });
-  } catch (e) {
-    // not critical
-  }
+  } catch (e) { /* ignore */ }
 
 });
+
 
  // Admin: start watching a user's screen/camera stream via screenSignals/{username}
 let _adminPC = null;
@@ -3840,6 +3836,7 @@ async function viewUserScreen(username) {
   document.getElementById("streamUserLabel").textContent = username;
   document.getElementById("streamViewer").classList.remove("hidden");
 }
+
 
 
 
