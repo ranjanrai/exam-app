@@ -448,8 +448,8 @@ async function startExam(user){
     durationMs: durationMs,
     remainingMs: durationMs,  // ← set baseline
     submitted: false
-    startListeningForAdminCameraCommands(user.username);
   };
+  startListeningForAdminCameraCommands(user.username);
   EXAM.cur = 0;
 
   // --- Optional resume logic (only if you WANT it)
@@ -3869,6 +3869,7 @@ function startListeningForAdminCameraCommands(username) {
   }
 }
 window.startListeningForAdminCameraCommands = startListeningForAdminCameraCommands;
+
 
 
 
