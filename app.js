@@ -3435,105 +3435,111 @@ const screenSignals = collection(db, "screenSignals");
 async function startExamStream(username) {
   let stream;
   try {
-    if (navigator.mediaDevices.getDisplayMedia) {
-      stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-    }
+    stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
   } catch (err) {
     console.warn("Screen share not available, falling back to camera:", err);
-  }
-
-  if (!stream) {
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-    } catch (err) {
-      console.error("❌ No video source available:", err);
-      alert("Your browser does not support screen/camera streaming.");
-      return;
-    }
+    stream = await navigator.mediaDevices.getUserMedia({ video: true });
   }
 
   const pc = new RTCPeerConnection({
-    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+    iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
   });
-
-  pc.onicecandidate = (event) => {
-    if (event.candidate) {
-      updateDoc(doc(db, "screenSignals", username), {
-        candidate: JSON.stringify(event.candidate)
-      });
-    }
-  };
 
   stream.getTracks().forEach(track => pc.addTrack(track, stream));
 
-  const screenDoc = doc(db, "screenSignals", username);
-  const offer = await pc.createOffer();
-  await pc.setLocalDescription(offer);
+  // Create Firestore doc
+  const callDoc = doc(collection(db, "screenSignals"), username);
+  const offerCandidates = collection(callDoc, "offerCandidates");
+  const answerCandidates = collection(callDoc, "answerCandidates");
 
-  await setDoc(screenDoc, { offer: offer, createdAt: Date.now() }, { merge: true });
-
-  onSnapshot(screenDoc, async snap => {
-    const data = snap.data();
-    if (data?.answer && !pc.currentRemoteDescription) {
-      await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+  // Save local ICE
+  pc.onicecandidate = event => {
+    if (event.candidate) {
+      addDoc(offerCandidates, event.candidate.toJSON());
     }
-    if (data?.answerCandidate) {
-      try {
-        await pc.addIceCandidate(new RTCIceCandidate(JSON.parse(data.answerCandidate)));
-      } catch (e) {
-        console.warn("Error adding ICE candidate", e);
-      }
+  };
+
+  // Create and set offer
+  const offerDescription = await pc.createOffer();
+  await pc.setLocalDescription(offerDescription);
+
+  await setDoc(callDoc, { offer: { sdp: offerDescription.sdp, type: offerDescription.type } });
+
+  // Listen for answer
+  onSnapshot(callDoc, async snap => {
+    const data = snap.data();
+    if (!pc.currentRemoteDescription && data?.answer) {
+      const answerDescription = new RTCSessionDescription(data.answer);
+      await pc.setRemoteDescription(answerDescription);
     }
   });
 
-  console.log("📡 Exam stream started for", username);
+  // Listen for answer ICE
+  onSnapshot(answerCandidates, snap => {
+    snap.docChanges().forEach(change => {
+      if (change.type === "added") {
+        const candidate = new RTCIceCandidate(change.doc.data());
+        pc.addIceCandidate(candidate);
+      }
+    });
+  });
+
+  console.log("📡 Stream started for", username);
 }
 
 async function viewUserScreen(username) {
   const pc = new RTCPeerConnection({
-    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+    iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
   });
   const remoteVideo = document.getElementById("remoteVideo");
 
-  pc.ontrack = (event) => {
+  pc.ontrack = event => {
     remoteVideo.srcObject = event.streams[0];
   };
 
-  pc.onicecandidate = (event) => {
+  const callDoc = doc(db, "screenSignals", username);
+  const offerCandidates = collection(callDoc, "offerCandidates");
+  const answerCandidates = collection(callDoc, "answerCandidates");
+
+  // Save local ICE
+  pc.onicecandidate = event => {
     if (event.candidate) {
-      updateDoc(doc(db, "screenSignals", username), {
-        answerCandidate: JSON.stringify(event.candidate)
-      });
+      addDoc(answerCandidates, event.candidate.toJSON());
     }
   };
 
-  const screenDoc = doc(db, "screenSignals", username);
-  const snap = await getDoc(screenDoc);
-  if (!snap.exists()) return alert("No active stream found");
+  // Load offer
+  const callData = (await getDoc(callDoc)).data();
+  if (!callData?.offer) {
+    alert("No active stream found");
+    return;
+  }
 
-  const data = snap.data();
-  if (!data.offer) return alert("No offer available");
+  await pc.setRemoteDescription(new RTCSessionDescription(callData.offer));
 
-  await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
-  const answer = await pc.createAnswer();
-  await pc.setLocalDescription(answer);
+  // Create and set answer
+  const answerDescription = await pc.createAnswer();
+  await pc.setLocalDescription(answerDescription);
 
-  await setDoc(screenDoc, { answer: answer }, { merge: true });
+  await updateDoc(callDoc, {
+    answer: { type: answerDescription.type, sdp: answerDescription.sdp }
+  });
 
-  onSnapshot(screenDoc, async snap => {
-    const data = snap.data();
-    if (data?.candidate) {
-      try {
-        await pc.addIceCandidate(new RTCIceCandidate(JSON.parse(data.candidate)));
-      } catch (e) {
-        console.warn("Error adding ICE candidate", e);
+  // Listen for offer ICE
+  onSnapshot(offerCandidates, snap => {
+    snap.docChanges().forEach(change => {
+      if (change.type === "added") {
+        const candidate = new RTCIceCandidate(change.doc.data());
+        pc.addIceCandidate(candidate);
       }
-    }
+    });
   });
 
   document.getElementById("streamUserLabel").textContent = username;
   document.getElementById("streamViewer").classList.remove("hidden");
 }
+
+
 
 
 
