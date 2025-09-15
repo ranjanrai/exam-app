@@ -92,42 +92,64 @@ function renderAdminAnnouncementsLive(){
     // real-time updates
     onSnapshot(colRef, snap => {
       const out = $('#adminAnnList');
+      if (!out) {
+        console.warn('renderAdminAnnouncementsLive: #adminAnnList not found in DOM');
+        return;
+      }
       out.innerHTML = '';
+
       // build array to sort by createdAt desc
       const arr = [];
       snap.forEach(d => {
-        const data = d.data();
-        if(!data) return;
+        // d may be a DocumentSnapshot
+        const data = (typeof d.data === 'function') ? d.data() : (d.data || {});
+        if (!data) return;
         arr.push({ id: d.id, ...data });
       });
-      arr.sort((a,b) => (b.createdAt||0) - (a.createdAt||0));
-      if(arr.length === 0){
+
+      // sort by createdAt (desc)
+      arr.sort((a,b) => (Number(b.createdAt || 0) - Number(a.createdAt || 0)));
+
+      if (arr.length === 0) {
         out.innerHTML = '<div class="small">No announcements yet.</div>';
         return;
       }
+
       arr.forEach(a => {
         const wrapper = document.createElement('div');
         wrapper.className = 'list-item';
         wrapper.style.display = 'flex';
         wrapper.style.alignItems = 'center';
         wrapper.style.justifyContent = 'space-between';
+
+        // safe text rendering
+        const author = escapeHTML(a.author || 'admin');
+        const text = escapeHTML(a.text || '');
+        const when = a.createdAt ? new Date(Number(a.createdAt)).toLocaleString() : '';
+
         wrapper.innerHTML = `
           <div style="flex:1">
-            <div style="font-weight:700">${escapeHTML(a.author || 'admin')} <span style="font-weight:400;font-size:12px;color:var(--muted)"> • ${new Date(a.createdAt).toLocaleString()}</span></div>
-            <div style="margin-top:6px">${escapeHTML(a.text || '')}</div>
+            <div style="font-weight:700">${author} <span style="font-weight:400;font-size:12px;color:var(--muted)"> • ${when}</span></div>
+            <div style="margin-top:6px;white-space:pre-wrap">${text}</div>
             ${a.deleted ? '<div style="color:var(--danger);font-size:12px;margin-top:4px">Deleted</div>' : ''}
           </div>
           <div style="margin-left:8px;white-space:nowrap">
             ${a.deleted ? '' : `<button class="btn" onclick="deleteAnnouncement('${a.id}')">Delete</button>`}
           </div>
         `;
+
         out.appendChild(wrapper);
       });
+    }, err => {
+      console.warn('renderAdminAnnouncementsLive onSnapshot error:', err);
+      const out = $('#adminAnnList');
+      if (out) out.innerHTML = '<div class="small">Failed to load announcements (see console).</div>';
     });
   } catch (e) {
     console.warn('renderAdminAnnouncementsLive error', e);
   }
 }
+
 
 // Student-side: listen for the latest announcement and update top banner in real-time
 // helper: normalize Firestore timestamp (returns milliseconds number)
@@ -208,7 +230,9 @@ function startAnnouncementsListenerForStudents(){
 
         const createdNum = _normalizeTs(data.createdAt);
         if(!latest || createdNum > (latest._createdAtNum || 0)) {
-          latest = { id: d.id, ...data, _createdAtNum: createdNum };
+          const data = d.data ? d.data() : (d.data || {});
+latest = { id: d.id, ...data, _createdAtNum: createdNum };
+
         }
       });
 
@@ -782,6 +806,7 @@ window.startAnnouncementsListenerForStudents = startAnnouncementsListenerForStud
  <script src="app.js"></script>
 </body>
 </html>
+
 
 
 
