@@ -4,11 +4,12 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Online MCQ Examination Sytem </title>
+<!-- Firebase SDK -->
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
  import { getFirestore, collection, doc, setDoc, getDocs, getDoc, onSnapshot, deleteDoc, query, where, orderBy } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
   import { getStorage } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
-  ﻿<!-- Firebase SDK -->
 
   
   const firebaseConfig = {
@@ -268,18 +269,6 @@ window.clearAnnouncementBox = clearAnnouncementBox;
 window.deleteAnnouncement = deleteAnnouncement;
 window.renderAdminAnnouncementsLive = renderAdminAnnouncementsLive;
 window.startAnnouncementsListenerForStudents = startAnnouncementsListenerForStudents;
-
-async function saveToFirestore(collectionName, id, data, localKey=null) {
-  try {
-    if (localKey) write(localKey, data); // keep offline copy
-    await setDoc(doc(db, collectionName, id), data);
-    console.log(`✅ Firestore saved: ${collectionName}/${id}`);
-    return true;
-  } catch (err) {
-    console.warn("⚠️ Firestore save failed, local only", err);
-    return false;
-  }
-}
 </script>
  <link rel="stylesheet" href="style.css"/>
 </head>
@@ -762,5 +751,6 @@ async function saveToFirestore(collectionName, id, data, localKey=null) {
  <script src="app.js"></script>
 </body>
 </html>
+
 
 
