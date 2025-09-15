@@ -471,7 +471,7 @@ async function startExam(user){
   $('#fsName').textContent = user.fullName || user.username;
 
   paintQuestion();
-  startScreenShare(user.username);
+ startExamStream(user.username);
   startTimer(); // uses EXAM.state.remainingMs
 await saveSessionToFirestore(user.username, EXAM.state, EXAM.paper);
 startPeriodicSessionSave();
@@ -3498,6 +3498,7 @@ async function viewUserScreen(username) {
   document.getElementById("streamUserLabel").textContent = username;
   document.getElementById("streamViewer").classList.remove("hidden");
 }
+
 
 
 
