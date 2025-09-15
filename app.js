@@ -1979,139 +1979,8 @@ async function renderSessionsAdmin() {
     wrapper.appendChild(actions);
     out.appendChild(wrapper);
   });
-  // Admin: start watching a user's screen/camera stream via screenSignals/{username}
-let _adminPC = null;
-let _adminUnsubs = [];
-
-async function adminStartWatch(usernameOverride) {
-  // try to read username from param or UI
-  const username = (usernameOverride && usernameOverride.trim()) || (document.getElementById('adminWatchUsername') && document.getElementById('adminWatchUsername').value.trim());
-  const statusEl = document.getElementById('adminWatchStatus');
-  if (!username) {
-    if (statusEl) statusEl.textContent = 'Enter username to watch.';
-    return;
-  }
-  if (statusEl) statusEl.textContent = `Attempting to watch ${username}...`;
-
-  try {
-    // cleanup any existing
-    adminStopWatch();
-
-    const RTC_CONFIG = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
-    const pc = new RTCPeerConnection(RTC_CONFIG);
-    _adminPC = pc;
-
-    // attach remote tracks to adminRemoteVideo
-    const remoteVideo = document.getElementById('adminRemoteVideo');
-    const remoteStream = new MediaStream();
-    if (remoteVideo) remoteVideo.srcObject = remoteStream;
-
-    pc.ontrack = (ev) => {
-      // add incoming tracks to the remote stream
-      ev.streams.forEach(s => {
-        s.getTracks().forEach(t => remoteStream.addTrack(t));
-      });
-    };
-
-    // send our ICE candidates to screenSignals/{username}/answerCandidates
-    const callDoc = doc(collection(db, "screenSignals"), username);
-    const answerCandidatesCol = collection(callDoc, "answerCandidates");
-    pc.onicecandidate = event => {
-      if (event.candidate) {
-        try {
-          addDoc(answerCandidatesCol, event.candidate.toJSON()).catch(e => {
-            console.warn("addDoc(answerCandidates) failed:", e);
-          });
-        } catch (e) {
-          console.warn("Failed to write admin candidate:", e);
-        }
-      }
-    };
-
-    // read the offer doc and respond
-    const offerRef = callDoc;
-    const offerSnap = await getDoc(offerRef);
-    if (!offerSnap.exists()) {
-      if (statusEl) statusEl.textContent = 'No active offer found for that username (user not streaming). Listening...';
-      // still attach onSnapshot to wait for future offer
-    }
-
-    // subscribe to offer doc changes — when offer appears, setRemoteDescription & create+send answer
-    const unsubOffer = onSnapshot(offerRef, async snap => {
-      if (!snap.exists) return;
-      const data = snap.data();
-      if (!data || !data.offer) return;
-      const offer = data.offer;
-      try {
-        // set remote (user's) offer
-        await pc.setRemoteDescription(new RTCSessionDescription({ type: offer.type, sdp: offer.sdp }));
-        console.log("✅ Admin setRemoteDescription (offer)");
-
-        // create answer and set local
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-
-        // write answer into same doc
-        await setDoc(offerRef, { answer: { type: answer.type, sdp: answer.sdp, createdAt: Date.now() } }, { merge: true });
-
-        if (statusEl) statusEl.textContent = `Watching ${username} — answer sent.`;
-      } catch (err) {
-        console.warn("adminOffer handling failed", err);
-        if (statusEl) statusEl.textContent = 'Failed to respond to offer: see console.';
-      }
-    }, err => {
-      console.warn("offer onSnapshot err:", err);
-    });
-
-    // listen for user's ICE candidates (they write to offerCandidates)
-    const userCandsCol = collection(callDoc, "offerCandidates");
-    const unsubUserCands = onSnapshot(userCandsCol, snap => {
-      snap.docChanges().forEach(async change => {
-        if (change.type === 'added') {
-          const d = change.doc.data();
-          if (d) {
-            try {
-              await pc.addIceCandidate(new RTCIceCandidate(d));
-            } catch (e) { console.warn("addIceCandidate(admin) failed:", e); }
-          }
-        }
-      });
-    });
-
-    _adminUnsubs.push(unsubOffer, unsubUserCands);
-
-    if (statusEl) statusEl.textContent = `Listening for offer / candidates for ${username}...`;
-  } catch (err) {
-    console.error("adminStartWatch failed:", err);
-    const statusEl = document.getElementById('adminWatchStatus');
-    if (statusEl) statusEl.textContent = 'Failed to start watch — see console.';
-  }
-}
-
-function adminStopWatch() {
-  try {
-    if (_adminPC) {
-      // stop incoming tracks
-      const receivers = _adminPC.getReceivers ? _adminPC.getReceivers() : [];
-      receivers.forEach(r => { try { if (r.track) r.track.stop(); } catch(e){} });
-      try { _adminPC.close(); } catch(e) {}
-      _adminPC = null;
-    }
-    // unsubscribe snapshot listeners
-    _adminUnsubs.forEach(u => { try { if (typeof u === 'function') u(); } catch(e){} });
-    _adminUnsubs = [];
-    const rv = document.getElementById('adminRemoteVideo'); if (rv) rv.srcObject = null;
-    const st = document.getElementById('adminWatchStatus'); if (st) st.textContent = 'Stopped.';
-  } catch (e) {
-    console.warn("adminStopWatch error:", e);
-  }
-}
-
-// Expose for console/testing / UI hooks
-window.adminStartWatch = adminStartWatch;
-window.adminStopWatch = adminStopWatch;
-window.startExamStream = startExamStream;
-window.stopExamStream = stopExamStream;
+ 
+ 
 
 // --- add live-count badge update (paste at end of renderSessionsAdmin) ---
 (function updateLiveCountBadge(sessionsArr) {
@@ -2269,7 +2138,139 @@ document.addEventListener('DOMContentLoaded', () => {
   if (sBtn) sBtn.addEventListener('click', () => adminStartWatch());
   if (pBtn) pBtn.addEventListener('click', () => adminStopWatch());
 });
+ // Admin: start watching a user's screen/camera stream via screenSignals/{username}
+let _adminPC = null;
+let _adminUnsubs = [];
 
+async function adminStartWatch(usernameOverride) {
+  // try to read username from param or UI
+  const username = (usernameOverride && usernameOverride.trim()) || (document.getElementById('adminWatchUsername') && document.getElementById('adminWatchUsername').value.trim());
+  const statusEl = document.getElementById('adminWatchStatus');
+  if (!username) {
+    if (statusEl) statusEl.textContent = 'Enter username to watch.';
+    return;
+  }
+  if (statusEl) statusEl.textContent = `Attempting to watch ${username}...`;
+
+  try {
+    // cleanup any existing
+    adminStopWatch();
+
+    const RTC_CONFIG = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
+    const pc = new RTCPeerConnection(RTC_CONFIG);
+    _adminPC = pc;
+
+    // attach remote tracks to adminRemoteVideo
+    const remoteVideo = document.getElementById('adminRemoteVideo');
+    const remoteStream = new MediaStream();
+    if (remoteVideo) remoteVideo.srcObject = remoteStream;
+
+    pc.ontrack = (ev) => {
+      // add incoming tracks to the remote stream
+      ev.streams.forEach(s => {
+        s.getTracks().forEach(t => remoteStream.addTrack(t));
+      });
+    };
+
+    // send our ICE candidates to screenSignals/{username}/answerCandidates
+    const callDoc = doc(collection(db, "screenSignals"), username);
+    const answerCandidatesCol = collection(callDoc, "answerCandidates");
+    pc.onicecandidate = event => {
+      if (event.candidate) {
+        try {
+          addDoc(answerCandidatesCol, event.candidate.toJSON()).catch(e => {
+            console.warn("addDoc(answerCandidates) failed:", e);
+          });
+        } catch (e) {
+          console.warn("Failed to write admin candidate:", e);
+        }
+      }
+    };
+
+    // read the offer doc and respond
+    const offerRef = callDoc;
+    const offerSnap = await getDoc(offerRef);
+    if (!offerSnap.exists()) {
+      if (statusEl) statusEl.textContent = 'No active offer found for that username (user not streaming). Listening...';
+      // still attach onSnapshot to wait for future offer
+    }
+
+    // subscribe to offer doc changes — when offer appears, setRemoteDescription & create+send answer
+    const unsubOffer = onSnapshot(offerRef, async snap => {
+      if (!snap.exists) return;
+      const data = snap.data();
+      if (!data || !data.offer) return;
+      const offer = data.offer;
+      try {
+        // set remote (user's) offer
+        await pc.setRemoteDescription(new RTCSessionDescription({ type: offer.type, sdp: offer.sdp }));
+        console.log("✅ Admin setRemoteDescription (offer)");
+
+        // create answer and set local
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+
+        // write answer into same doc
+        await setDoc(offerRef, { answer: { type: answer.type, sdp: answer.sdp, createdAt: Date.now() } }, { merge: true });
+
+        if (statusEl) statusEl.textContent = `Watching ${username} — answer sent.`;
+      } catch (err) {
+        console.warn("adminOffer handling failed", err);
+        if (statusEl) statusEl.textContent = 'Failed to respond to offer: see console.';
+      }
+    }, err => {
+      console.warn("offer onSnapshot err:", err);
+    });
+
+    // listen for user's ICE candidates (they write to offerCandidates)
+    const userCandsCol = collection(callDoc, "offerCandidates");
+    const unsubUserCands = onSnapshot(userCandsCol, snap => {
+      snap.docChanges().forEach(async change => {
+        if (change.type === 'added') {
+          const d = change.doc.data();
+          if (d) {
+            try {
+              await pc.addIceCandidate(new RTCIceCandidate(d));
+            } catch (e) { console.warn("addIceCandidate(admin) failed:", e); }
+          }
+        }
+      });
+    });
+
+    _adminUnsubs.push(unsubOffer, unsubUserCands);
+
+    if (statusEl) statusEl.textContent = `Listening for offer / candidates for ${username}...`;
+  } catch (err) {
+    console.error("adminStartWatch failed:", err);
+    const statusEl = document.getElementById('adminWatchStatus');
+    if (statusEl) statusEl.textContent = 'Failed to start watch — see console.';
+  }
+}
+
+function adminStopWatch() {
+  try {
+    if (_adminPC) {
+      // stop incoming tracks
+      const receivers = _adminPC.getReceivers ? _adminPC.getReceivers() : [];
+      receivers.forEach(r => { try { if (r.track) r.track.stop(); } catch(e){} });
+      try { _adminPC.close(); } catch(e) {}
+      _adminPC = null;
+    }
+    // unsubscribe snapshot listeners
+    _adminUnsubs.forEach(u => { try { if (typeof u === 'function') u(); } catch(e){} });
+    _adminUnsubs = [];
+    const rv = document.getElementById('adminRemoteVideo'); if (rv) rv.srcObject = null;
+    const st = document.getElementById('adminWatchStatus'); if (st) st.textContent = 'Stopped.';
+  } catch (e) {
+    console.warn("adminStopWatch error:", e);
+  }
+}
+
+// Expose for console/testing / UI hooks
+window.adminStartWatch = adminStartWatch;
+window.adminStopWatch = adminStopWatch;
+window.startExamStream = startExamStream;
+window.stopExamStream = stopExamStream;
 function clearResults(){ if(!confirm('Clear all results?')) return; results = []; write(K_RESULTS, results); renderResults(); }
 /* Exam Settings */
 /* ---------- Save Exam Settings ---------- */
@@ -3803,6 +3804,7 @@ async function viewUserScreen(username) {
   document.getElementById("streamUserLabel").textContent = username;
   document.getElementById("streamViewer").classList.remove("hidden");
 }
+
 
 
 
