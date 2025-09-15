@@ -2017,19 +2017,58 @@ function updateLiveCountBadge(sessionsArr) {
   }
 }
   // setup badge refresher (updates Online/Offline based on updatedAt)
-  function refreshBadges() {
+  // ---------- setup badge refresher (updates Online/Offline based on updatedAt) ----------
+function refreshBadges() {
+  // find container each time (safe even if called outside renderSessionsAdmin)
   const container = document.getElementById('adminSessionsList') || document.getElementById('sessionsArea') || document.body;
+  if (!container) return;
+
   const items = Array.from(container.querySelectorAll('.list-item'));
   const nowLocal = Date.now();
-    items.forEach(item => {
-      // find the small timestamp inside mid (we stored nothing to data-attr), try to derive from DOM text or from sessions array not accessible here.
-      // Simpler approach: re-render periodically via auto-refresh if precise millisecond accuracy is needed.
-    });
-  }
-  // call refresh once (UI shows correct state on initial render because we used "now")
-  refreshBadges();
+  const THRESHOLD_MS = 15 * 1000; // same threshold used elsewhere
 
-  // done
+  items.forEach(item => {
+    try {
+      // Find an element inside the item that contains the timestamp.
+      // This assumes you render a data-updated attribute or include an element with class ".updatedAt"
+      // If you didn't store updatedAt on DOM, we fall back to toggling based on presence of ".online-dot" color.
+      const tsEl = item.querySelector('.updatedAt'); // optional element you can add when rendering
+      let itemTs = 0;
+      if (tsEl && tsEl.dataset && tsEl.dataset.ts) {
+        itemTs = Number(tsEl.dataset.ts) || 0;
+      } else if (tsEl && tsEl.textContent) {
+        // try to parse a timestamp number if you printed it
+        const maybe = parseInt(tsEl.textContent.replace(/\D/g, ''), 10);
+        if (!isNaN(maybe) && maybe > 1000) itemTs = maybe;
+      }
+
+      const onlineEl = item.querySelector('.online-indicator'); // optional dot span
+      const isOnline = itemTs && ((nowLocal - itemTs) < THRESHOLD_MS);
+
+      // Update indicator element if exists
+      if (onlineEl) {
+        onlineEl.textContent = isOnline ? '🟢' : '🔴';
+        onlineEl.style.color = isOnline ? '#34d399' : '#f87171';
+      } else {
+        // fallback: try to update the text badge in the row (a small element with class .status)
+        const statusEl = item.querySelector('.status');
+        if (statusEl) statusEl.innerHTML = isOnline ? `<span style="color:#34d399;font-weight:700">🟢 Online</span>` : `<span style="color:#f87171;font-weight:700">🔴 Offline</span>`;
+      }
+    } catch (e) {
+      // ignore per-item errors to keep the loop robust
+      console.warn('refreshBadges: item update failed', e);
+    }
+  });
+}
+
+// call refresh once right after rendering so UI shows correct state initially
+refreshBadges();
+
+// OPTIONAL: keep badges up-to-date every 10 seconds (use only if you want auto-update)
+if (typeof window.SESSIONS_BADGE_REFRESH_ID === 'undefined') {
+  window.SESSIONS_BADGE_REFRESH_ID = setInterval(refreshBadges, 10_000);
+}
+
 
 
 
@@ -3881,6 +3920,7 @@ function startListeningForAdminCameraCommands(username) {
   }
 }
 window.startListeningForAdminCameraCommands = startListeningForAdminCameraCommands;
+
 
 
 
