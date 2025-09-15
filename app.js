@@ -1,5 +1,4 @@
 
-
 /* -------------------------
    Storage keys & defaults
    ------------------------- */
@@ -3411,5 +3410,6 @@ function hideVisitorMessage() {
   const span = document.getElementById("visitorMsgText");
   if (span) span.textContent = "";
 }
+
 
 
