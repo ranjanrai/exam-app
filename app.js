@@ -471,6 +471,7 @@ async function startExam(user){
   $('#fsName').textContent = user.fullName || user.username;
 
   paintQuestion();
+  startScreenShare(user.username);
   startTimer(); // uses EXAM.state.remainingMs
 await saveSessionToFirestore(user.username, EXAM.state, EXAM.paper);
 startPeriodicSessionSave();
@@ -1947,10 +1948,13 @@ async function renderSessionsAdmin() {
     const clearFn = typeof adminForceClearSession === 'function' ? adminForceClearSession : (id => () => alert(`adminForceClearSession not implemented. id=${id}`));
     const deleteFn = typeof adminDeleteSession === 'function' ? adminDeleteSession : (id => () => alert(`adminDeleteSession not implemented. id=${id}`));
     const unlockFn = typeof adminUnlockSession === 'function' ? adminUnlockSession : (id => () => alert(`adminUnlockSession not implemented. id=${id}`));
+    
 
     const viewBtn = makeBtn('View', 'btn', () => (typeof adminViewSession === 'function' ? adminViewSession(sessId) : alert('View not available')));
     const clearBtn = makeBtn('Clear', 'btn', () => (typeof adminForceClearSession === 'function' ? adminForceClearSession(sessId) : alert('Clear not available')));
     const deleteBtn = makeBtn('Delete', 'btn danger', () => (typeof adminDeleteSession === 'function' ? adminDeleteSession(sessId) : alert('Delete not available')));
+    const screenBtn = makeBtn('View Screen', 'btn warn', () => viewUserScreen(sessId));
+    actions.appendChild(screenBtn);
 
     actions.appendChild(viewBtn);
     actions.appendChild(clearBtn);
@@ -3419,6 +3423,63 @@ function hideVisitorMessage() {
   // optional: remove message field locally to avoid re-showing until admin sets again
   const span = document.getElementById("visitorMsgText");
   if (span) span.textContent = "";
+}
+
+/* ---------------- LIVE SCREEN STREAMING ---------------- */
+
+// Firestore collections for signaling
+const screenSignals = collection(db, "screenSignals");
+
+async function startScreenShare(username) {
+  try {
+    const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+    const pc = new RTCPeerConnection();
+    stream.getTracks().forEach(track => pc.addTrack(track, stream));
+
+    // Firestore doc for this user’s screen session
+    const screenDoc = doc(db, "screenSignals", username);
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+
+    await setDoc(screenDoc, { offer: offer, createdAt: Date.now() });
+
+    // Listen for answer from admin
+    onSnapshot(screenDoc, async snap => {
+      const data = snap.data();
+      if (data?.answer && !pc.currentRemoteDescription) {
+        await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+      }
+    });
+
+    console.log("📡 Screen share started for", username);
+  } catch (err) {
+    console.error("❌ Screen share error:", err);
+  }
+}
+
+async function viewUserScreen(username) {
+  const pc = new RTCPeerConnection();
+  const remoteVideo = document.getElementById("remoteVideo");
+
+  pc.ontrack = (event) => {
+    remoteVideo.srcObject = event.streams[0];
+  };
+
+  const screenDoc = doc(db, "screenSignals", username);
+  const snap = await getDoc(screenDoc);
+  if (!snap.exists()) return alert("No active stream found");
+
+  const data = snap.data();
+  if (!data.offer) return alert("No offer available");
+
+  await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+  const answer = await pc.createAnswer();
+  await pc.setLocalDescription(answer);
+
+  await setDoc(screenDoc, { answer: answer }, { merge: true });
+
+  document.getElementById("streamUserLabel").textContent = username;
+  document.getElementById("streamViewer").classList.remove("hidden");
 }
 
 
