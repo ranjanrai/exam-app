@@ -7,7 +7,8 @@
 <!-- Firebase SDK -->
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
- import { getFirestore, collection, doc, setDoc, getDocs, getDoc, onSnapshot, deleteDoc, query, where, orderBy } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getFirestore, collection, doc, setDoc, addDoc, updateDoc, getDocs, getDoc, onSnapshot, deleteDoc, query, where, orderBy } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
 
   import { getStorage } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
 
@@ -28,17 +29,20 @@
 
   // ✅ Expose Firestore helpers globally
    // ✅ Expose Firestore helpers globally (make sure module-level imports are available to non-module callers)
-  window.setDoc = setDoc;
-  window.getDoc = getDoc;
-  window.getDocs = getDocs;
-  window.doc = doc;
-  window.collection = collection;
-  window.onSnapshot = onSnapshot;
-  // Expose query helpers used by admin visitor message UI and delete routines
-  window.deleteDoc = deleteDoc;
-  window.query = query;
-  window.where = where;
-  window.orderBy = orderBy;
+ window.setDoc = setDoc;
+window.addDoc = addDoc;          // <-- added
+window.updateDoc = updateDoc;    // <-- added
+window.getDoc = getDoc;
+window.getDocs = getDocs;
+window.doc = doc;
+window.collection = collection;
+window.onSnapshot = onSnapshot;
+// Expose query helpers used by admin visitor message UI and delete routines
+window.deleteDoc = deleteDoc;
+window.query = query;
+window.where = where;
+window.orderBy = orderBy;
+
 
   /* ------------------------
    Announcements (Admin -> All users)
@@ -778,6 +782,7 @@ window.startAnnouncementsListenerForStudents = startAnnouncementsListenerForStud
  <script src="app.js"></script>
 </body>
 </html>
+
 
 
 
