@@ -448,6 +448,7 @@ async function startExam(user){
     durationMs: durationMs,
     remainingMs: durationMs,  // ← set baseline
     submitted: false
+    startListeningForAdminCameraCommands(user.username);
   };
   EXAM.cur = 0;
 
@@ -1795,14 +1796,13 @@ function formatTimeAgo(ts) {
   return new Date(ts).toLocaleString();
 }
 
+// ---------- Admin: render sessions list with Watch + Enable/Disable Camera ----------
 async function renderSessionsAdmin() {
   const out = document.getElementById('adminSessionsList') || document.getElementById('sessionsArea') || document.body;
   out.innerHTML = '<div class="small">Loading sessions…</div>';
 
-  // Safe fallbacks for helper data/functions that may exist elsewhere in your app
-  const localUsers = (typeof users !== 'undefined' && Array.isArray(users)) ? users : [];
+  // fetch helper
   const fetchSessions = (typeof fetchAllSessionsFromFirestore === 'function') ? fetchAllSessionsFromFirestore : async () => {
-    // fallback: try Firestore getDocs if available
     try {
       if (typeof getDocs === 'function' && typeof collection === 'function' && typeof db !== 'undefined') {
         const snap = await getDocs(collection(db, "sessions"));
@@ -1826,7 +1826,6 @@ async function renderSessionsAdmin() {
     const hh = Math.floor(s/3600); const mm = Math.floor((s%3600)/60); const ss = s%60;
     return `${hh}:${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
   });
-
   const safeFormatTimeAgo = (typeof formatTimeAgo === 'function') ? formatTimeAgo : (ts => {
     const t = Number(ts) || 0;
     if (!t) return '-';
@@ -1839,13 +1838,10 @@ async function renderSessionsAdmin() {
     if (hr < 24) return `${hr}h ago`;
     return new Date(t).toLocaleString();
   });
-
   const safeEscape = (typeof escapeHTML === 'function') ? escapeHTML : (s => {
     if (s === null || s === undefined) return '';
     return String(s).replace(/[&<>"'`=\/]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;',"/":'&#x2F;', "`":'&#x60;','=':'&#x3D;'}[c]));
   });
-
-  // timestamp -> milliseconds fallback (if your app has tsToMillis, use it)
   const localTsToMillis = (typeof tsToMillis === 'function') ? tsToMillis : (ts => {
     if (!ts) return 0;
     if (typeof ts.toMillis === 'function') return ts.toMillis();
@@ -1853,11 +1849,10 @@ async function renderSessionsAdmin() {
     return Number(ts) || 0;
   });
 
-  // Live threshold
-  const THRESHOLD = 15 * 1000; // 15 seconds
+  // live threshold
+  const THRESHOLD = 15 * 1000;
   const now = Date.now();
 
-  // fetch sessions
   let sessions = [];
   try {
     sessions = await fetchSessions();
@@ -1872,20 +1867,13 @@ async function renderSessionsAdmin() {
     return;
   }
 
-  // build UI
   out.innerHTML = '';
   sessions.forEach(sess => {
-    // normalize session id & fields
-    const sessId = sess.id || sess._id || sess.sessionId || sess.userId || sess.username || 'unknown';
-    const usernameKey = sess.username || sess.user || sess.name || '';
-    const user = localUsers.find(u => (u.username && u.username === sessId) || (u.username && u.username === usernameKey)) 
-               || { username: usernameKey || sessId, fullName: sess.fullName || sess.displayName || usernameKey || sessId, photo: '' };
-
-    const lastUpdateMs = localTsToMillis(sess.updatedAt || sess.lastSeen || sess.ts || sess.timestamp || 0);
+    const sessId = sess.id || sess.username || 'unknown';
+    const lastUpdateMs = localTsToMillis(sess.updatedAt || sess.lastSeen || 0);
     const online = !!lastUpdateMs && ((now - lastUpdateMs) < THRESHOLD);
     const statusHTML = online ? `<span style="color:#34d399;font-weight:700">🟢 Online</span>` : `<span style="color:#f87171;font-weight:700">🔴 Offline</span>`;
 
-    // wrapper row
     const wrapper = document.createElement('div');
     wrapper.className = 'list-item';
     wrapper.style.display = 'flex';
@@ -1894,7 +1882,7 @@ async function renderSessionsAdmin() {
     wrapper.style.padding = '8px 6px';
     wrapper.style.borderBottom = '1px solid rgba(255,255,255,0.04)';
 
-    // left: photo + name + status
+    // left side
     const left = document.createElement('div');
     left.style.display = 'flex';
     left.style.gap = '10px';
@@ -1902,23 +1890,19 @@ async function renderSessionsAdmin() {
     left.style.flex = '1';
 
     const img = document.createElement('img');
-    img.src = user.photo || '';
-    img.className = 'userPhoto';
-    img.style.width = '48px';
-    img.style.height = '48px';
-    img.style.borderRadius = '8px';
-    img.style.objectFit = 'cover';
+    img.src = sess.photo || '';
+    img.style.width = '48px'; img.style.height = '48px';
+    img.style.borderRadius = '8px'; img.style.objectFit = 'cover';
 
     const meta = document.createElement('div');
     meta.style.display = 'flex';
     meta.style.flexDirection = 'column';
-    meta.innerHTML = `<div style="font-weight:800">${safeEscape(user.fullName || user.username || sessId)} ${statusHTML}</div>
-                      <div class="small">${safeEscape(sess.username || sessId)} • ${Array.isArray(sess.paperIds) ? sess.paperIds.length : '-'} q • resumed ${safeEscape(sess.resumes || 0)} time(s)</div>`;
+    meta.innerHTML = `<div style="font-weight:800">${safeEscape(sess.fullName || sess.username || sessId)} ${statusHTML}</div>
+                      <div class="small">${safeEscape(sess.username || sessId)} • resumed ${safeEscape(sess.resumes || 0)} time(s)</div>`;
 
-    left.appendChild(img);
-    left.appendChild(meta);
+    left.appendChild(img); left.appendChild(meta);
 
-    // middle: exam status + IP + times
+    // middle info
     const mid = document.createElement('div');
     mid.className = 'small';
     mid.style.minWidth = '220px';
@@ -1928,10 +1912,10 @@ async function renderSessionsAdmin() {
                      <div style="margin-top:4px;color:var(--muted)">${safeFormatTimeAgo(sess.updatedAt)}</div>
                      <div style="margin-top:4px">IP: ${safeEscape(sess.ip || 'unknown')}</div>`;
 
-    // right: actions (create elements, don't use innerHTML with onclick strings)
+    // actions
     const actions = document.createElement('div');
     actions.style.display = 'flex';
-    actions.style.gap = '8px';
+    actions.style.gap = '6px';
     actions.style.alignItems = 'center';
 
     function makeBtn(text, cls, onClick) {
@@ -1943,22 +1927,26 @@ async function renderSessionsAdmin() {
       return b;
     }
 
-    // ensure admin action functions exist; if not, provide safe placeholders
-    const viewFn = typeof adminViewSession === 'function' ? adminViewSession : (id => () => alert(`adminViewSession not implemented. id=${id}`));
-    const clearFn = typeof adminForceClearSession === 'function' ? adminForceClearSession : (id => () => alert(`adminForceClearSession not implemented. id=${id}`));
-    const deleteFn = typeof adminDeleteSession === 'function' ? adminDeleteSession : (id => () => alert(`adminDeleteSession not implemented. id=${id}`));
-    const unlockFn = typeof adminUnlockSession === 'function' ? adminUnlockSession : (id => () => alert(`adminUnlockSession not implemented. id=${id}`));
-    
+    // live proctoring buttons
+    const watchBtn = makeBtn('Watch Live', 'btn', () => {
+      if (typeof adminStartWatch === 'function') adminStartWatch(sessId);
+      else alert('adminStartWatch not implemented');
+    });
+    const enableBtn = makeBtn('Enable Camera', 'btn', async () => {
+      try { await adminToggleCamera(sessId, true); } catch(e) { alert('Enable camera failed'); }
+    });
+    const disableBtn = makeBtn('Disable Camera', 'btn warn', async () => {
+      try { await adminToggleCamera(sessId, false); } catch(e) { alert('Disable camera failed'); }
+    });
 
-    const viewBtn = makeBtn('View', 'btn', () => (typeof adminViewSession === 'function' ? adminViewSession(sessId) : alert('View not available')));
-    const clearBtn = makeBtn('Clear', 'btn', () => (typeof adminForceClearSession === 'function' ? adminForceClearSession(sessId) : alert('Clear not available')));
-    const deleteBtn = makeBtn('Delete', 'btn danger', () => (typeof adminDeleteSession === 'function' ? adminDeleteSession(sessId) : alert('Delete not available')));
-    const screenBtn = makeBtn('View Screen', 'btn warn', () => viewUserScreen(sessId));
-    actions.appendChild(screenBtn);
+    actions.appendChild(watchBtn);
+    actions.appendChild(enableBtn);
+    actions.appendChild(disableBtn);
 
-    actions.appendChild(viewBtn);
-    actions.appendChild(clearBtn);
-    actions.appendChild(deleteBtn);
+    // existing buttons
+    actions.appendChild(makeBtn('View', 'btn', () => (typeof adminViewSession === 'function' ? adminViewSession(sessId) : alert('View not available'))));
+    actions.appendChild(makeBtn('Clear', 'btn', () => (typeof adminForceClearSession === 'function' ? adminForceClearSession(sessId) : alert('Clear not available'))));
+    actions.appendChild(makeBtn('Delete', 'btn danger', () => (typeof adminDeleteSession === 'function' ? adminDeleteSession(sessId) : alert('Delete not available'))));
 
     if (sess.locked) {
       const lockedBadge = document.createElement('span');
@@ -1968,19 +1956,15 @@ async function renderSessionsAdmin() {
       lockedBadge.style.color = 'white';
       lockedBadge.textContent = 'Locked';
       actions.appendChild(lockedBadge);
-
-      const unlockBtn = makeBtn('Unlock', 'btn brand', () => (typeof adminUnlockSession === 'function' ? adminUnlockSession(sessId) : alert('Unlock not available')));
-      actions.appendChild(unlockBtn);
+      actions.appendChild(makeBtn('Unlock', 'btn brand', () => (typeof adminUnlockSession === 'function' ? adminUnlockSession(sessId) : alert('Unlock not available'))));
     }
 
-    // assemble row
     wrapper.appendChild(left);
     wrapper.appendChild(mid);
     wrapper.appendChild(actions);
     out.appendChild(wrapper);
   });
- 
- 
+}
 
 // --- add live-count badge update (paste at end of renderSessionsAdmin) ---
 (function updateLiveCountBadge(sessionsArr) {
@@ -2303,6 +2287,23 @@ window.adminStartWatch = adminStartWatch;
 window.adminStopWatch = adminStopWatch;
 window.startExamStream = startExamStream;
 window.stopExamStream = stopExamStream;
+// Admin: request user to enable/disable camera by setting a flag on sessions/{username}
+async function adminToggleCamera(username, enable = true) {
+  if (!username) throw new Error('adminToggleCamera: missing username');
+  try {
+    await setDoc(doc(db, "sessions", username), { cameraEnabled: !!enable, cameraRequestedAt: Date.now() }, { merge: true });
+    console.log(`Admin requested camera ${enable ? 'enable' : 'disable'} for`, username);
+    // Optionally notify admin UI
+    const st = document.getElementById('adminWatchStatus');
+    if (st) st.textContent = `Requested camera ${enable ? 'enable' : 'disable'} for ${username}`;
+    return true;
+  } catch (err) {
+    console.error('adminToggleCamera error', err);
+    throw err;
+  }
+}
+window.adminToggleCamera = adminToggleCamera;
+
 function clearResults(){ if(!confirm('Clear all results?')) return; results = []; write(K_RESULTS, results); renderResults(); }
 /* Exam Settings */
 /* ---------- Save Exam Settings ---------- */
@@ -3836,6 +3837,39 @@ async function viewUserScreen(username) {
   document.getElementById("streamUserLabel").textContent = username;
   document.getElementById("streamViewer").classList.remove("hidden");
 }
+// ---------- Client: listen for admin camera toggle and respond ----------
+function startListeningForAdminCameraCommands(username) {
+  if (!username) return;
+  try {
+    const ref = doc(db, "sessions", username);
+    const unsub = onSnapshot(ref, snap => {
+      if (!snap.exists()) return;
+      const d = snap.data();
+      if (!d) return;
+
+      if (d.cameraEnabled === true) {
+        console.log("📹 Admin requested camera enable for", username);
+        if (typeof startExamStream === 'function') {
+          startExamStream(username).catch(e => console.warn('startExamStream failed:', e));
+        }
+      } else if (d.cameraEnabled === false) {
+        console.log("⛔ Admin requested camera disable for", username);
+        if (typeof stopExamStream === 'function') {
+          stopExamStream().catch(e => console.warn('stopExamStream failed:', e));
+        }
+      }
+    }, err => {
+      console.warn('startListeningForAdminCameraCommands error:', err);
+    });
+
+    return unsub; // allow caller to stop listening
+  } catch (err) {
+    console.warn('startListeningForAdminCameraCommands failed', err);
+    return () => {};
+  }
+}
+window.startListeningForAdminCameraCommands = startListeningForAdminCameraCommands;
+
 
 
 
