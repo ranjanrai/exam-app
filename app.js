@@ -2119,25 +2119,61 @@ async function adminUnlockSession(sessionId) {
 window.adminUnlockSession = adminUnlockSession; // expose globally for the inline onclick
 
 // Auto-refresh toggle handler: call render every 5s when checked
+// DOM ready: wire auto-refresh toggle + admin proctor buttons
 document.addEventListener('DOMContentLoaded', () => {
-  const cb = document.getElementById('adminAutoRefreshSessions');
-  if (!cb) return;
-  cb.addEventListener('change', () => {
-    if (cb.checked) {
-      // start auto-refresh
-      if (SESSIONS_AUTO_REFRESH_ID) clearInterval(SESSIONS_AUTO_REFRESH_ID);
-      SESSIONS_AUTO_REFRESH_ID = setInterval(renderSessionsAdmin, 5000);
-    } else {
-      if (SESSIONS_AUTO_REFRESH_ID) { clearInterval(SESSIONS_AUTO_REFRESH_ID); SESSIONS_AUTO_REFRESH_ID = null; }
+  // --- Auto-refresh toggle ---
+  try {
+    const cb = document.getElementById('adminAutoRefreshSessions');
+    if (cb) {
+      // restore from existing interval value if any
+      if (typeof SESSIONS_AUTO_REFRESH_ID === 'undefined') window.SESSIONS_AUTO_REFRESH_ID = null;
+      cb.addEventListener('change', () => {
+        if (cb.checked) {
+          if (window.SESSIONS_AUTO_REFRESH_ID) clearInterval(window.SESSIONS_AUTO_REFRESH_ID);
+          window.SESSIONS_AUTO_REFRESH_ID = setInterval(() => {
+            try { renderSessionsAdmin(); } catch(e) { console.warn('renderSessionsAdmin error', e); }
+          }, 5000);
+        } else {
+          if (window.SESSIONS_AUTO_REFRESH_ID) {
+            clearInterval(window.SESSIONS_AUTO_REFRESH_ID);
+            window.SESSIONS_AUTO_REFRESH_ID = null;
+          }
+        }
+      });
     }
-  });
+  } catch (e) {
+    console.warn('Auto-refresh toggle wiring failed:', e);
+  }
+
+  // --- Wire admin proctor buttons ---
+  try {
+    const sBtn = document.getElementById('adminWatchStartBtn');
+    const pBtn = document.getElementById('adminWatchStopBtn');
+    if (sBtn) sBtn.addEventListener('click', () => adminStartWatch());
+    if (pBtn) pBtn.addEventListener('click', () => adminStopWatch());
+  } catch (e) {
+    console.warn('Admin proctor button wiring failed:', e);
+  }
+
+  // --- Optional: when a session row is clicked, auto-fill username and start watching ---
+  // This assumes your session rows have class "session-row" and attribute data-username.
+  // If you don't have such rows, this block does nothing.
+  try {
+    document.querySelectorAll && document.querySelectorAll('.session-row[data-username]').forEach(el => {
+      el.addEventListener('click', () => {
+        const u = el.getAttribute('data-username');
+        const input = document.getElementById('adminWatchUsername');
+        if (input) input.value = u;
+        // Small delay so UI updates before starting
+        setTimeout(() => adminStartWatch(u), 120);
+      });
+    });
+  } catch (e) {
+    // not critical
+  }
+
 });
- // --- Wire admin proctor buttons ---
-  const sBtn = document.getElementById('adminWatchStartBtn');
-  const pBtn = document.getElementById('adminWatchStopBtn');
-  if (sBtn) sBtn.addEventListener('click', () => adminStartWatch());
-  if (pBtn) pBtn.addEventListener('click', () => adminStopWatch());
-});
+
  // Admin: start watching a user's screen/camera stream via screenSignals/{username}
 let _adminPC = null;
 let _adminUnsubs = [];
@@ -3804,6 +3840,7 @@ async function viewUserScreen(username) {
   document.getElementById("streamUserLabel").textContent = username;
   document.getElementById("streamViewer").classList.remove("hidden");
 }
+
 
 
 
