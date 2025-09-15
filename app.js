@@ -3452,9 +3452,10 @@ async function startExamStream(username) {
     }
   }
 
-  const pc = new RTCPeerConnection();
+  const pc = new RTCPeerConnection({
+    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+  });
 
-  // 🔹 send ICE candidates to Firestore
   pc.onicecandidate = (event) => {
     if (event.candidate) {
       updateDoc(doc(db, "screenSignals", username), {
@@ -3469,16 +3470,16 @@ async function startExamStream(username) {
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
 
-  await setDoc(screenDoc, { offer: offer, createdAt: Date.now() });
+  await setDoc(screenDoc, { offer: offer, createdAt: Date.now() }, { merge: true });
 
   onSnapshot(screenDoc, async snap => {
     const data = snap.data();
     if (data?.answer && !pc.currentRemoteDescription) {
       await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
     }
-    if (data?.candidate) {
+    if (data?.answerCandidate) {
       try {
-        await pc.addIceCandidate(new RTCIceCandidate(JSON.parse(data.candidate)));
+        await pc.addIceCandidate(new RTCIceCandidate(JSON.parse(data.answerCandidate)));
       } catch (e) {
         console.warn("Error adding ICE candidate", e);
       }
@@ -3489,14 +3490,15 @@ async function startExamStream(username) {
 }
 
 async function viewUserScreen(username) {
-  const pc = new RTCPeerConnection();
+  const pc = new RTCPeerConnection({
+    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+  });
   const remoteVideo = document.getElementById("remoteVideo");
 
   pc.ontrack = (event) => {
     remoteVideo.srcObject = event.streams[0];
   };
 
-  // 🔹 send ICE candidates back to user
   pc.onicecandidate = (event) => {
     if (event.candidate) {
       updateDoc(doc(db, "screenSignals", username), {
@@ -3520,9 +3522,9 @@ async function viewUserScreen(username) {
 
   onSnapshot(screenDoc, async snap => {
     const data = snap.data();
-    if (data?.answerCandidate) {
+    if (data?.candidate) {
       try {
-        await pc.addIceCandidate(new RTCIceCandidate(JSON.parse(data.answerCandidate)));
+        await pc.addIceCandidate(new RTCIceCandidate(JSON.parse(data.candidate)));
       } catch (e) {
         console.warn("Error adding ICE candidate", e);
       }
@@ -3532,6 +3534,8 @@ async function viewUserScreen(username) {
   document.getElementById("streamUserLabel").textContent = username;
   document.getElementById("streamViewer").classList.remove("hidden");
 }
+
+
 
 
 
