@@ -3435,7 +3435,6 @@ const screenSignals = collection(db, "screenSignals");
 async function startExamStream(username) {
   let stream;
   try {
-    // Try screen share first (works only on desktop)
     if (navigator.mediaDevices.getDisplayMedia) {
       stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
     }
@@ -3445,7 +3444,6 @@ async function startExamStream(username) {
 
   if (!stream) {
     try {
-      // Mobile fallback: use camera
       stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
     } catch (err) {
       console.error("❌ No video source available:", err);
@@ -3455,31 +3453,56 @@ async function startExamStream(username) {
   }
 
   const pc = new RTCPeerConnection();
+
+  // 🔹 send ICE candidates to Firestore
+  pc.onicecandidate = (event) => {
+    if (event.candidate) {
+      updateDoc(doc(db, "screenSignals", username), {
+        candidate: JSON.stringify(event.candidate)
+      });
+    }
+  };
+
   stream.getTracks().forEach(track => pc.addTrack(track, stream));
 
-  // Firestore doc for this user’s stream
   const screenDoc = doc(db, "screenSignals", username);
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
 
   await setDoc(screenDoc, { offer: offer, createdAt: Date.now() });
 
-  // Listen for admin answer
   onSnapshot(screenDoc, async snap => {
     const data = snap.data();
     if (data?.answer && !pc.currentRemoteDescription) {
       await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
     }
+    if (data?.candidate) {
+      try {
+        await pc.addIceCandidate(new RTCIceCandidate(JSON.parse(data.candidate)));
+      } catch (e) {
+        console.warn("Error adding ICE candidate", e);
+      }
+    }
   });
 
   console.log("📡 Exam stream started for", username);
 }
+
 async function viewUserScreen(username) {
   const pc = new RTCPeerConnection();
   const remoteVideo = document.getElementById("remoteVideo");
 
   pc.ontrack = (event) => {
     remoteVideo.srcObject = event.streams[0];
+  };
+
+  // 🔹 send ICE candidates back to user
+  pc.onicecandidate = (event) => {
+    if (event.candidate) {
+      updateDoc(doc(db, "screenSignals", username), {
+        answerCandidate: JSON.stringify(event.candidate)
+      });
+    }
   };
 
   const screenDoc = doc(db, "screenSignals", username);
@@ -3495,9 +3518,22 @@ async function viewUserScreen(username) {
 
   await setDoc(screenDoc, { answer: answer }, { merge: true });
 
+  onSnapshot(screenDoc, async snap => {
+    const data = snap.data();
+    if (data?.answerCandidate) {
+      try {
+        await pc.addIceCandidate(new RTCIceCandidate(JSON.parse(data.answerCandidate)));
+      } catch (e) {
+        console.warn("Error adding ICE candidate", e);
+      }
+    }
+  });
+
   document.getElementById("streamUserLabel").textContent = username;
   document.getElementById("streamViewer").classList.remove("hidden");
 }
+
+
 
 
 
