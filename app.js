@@ -2016,7 +2016,7 @@ async function renderSessionsAdmin() {
   } catch (e) {
     console.warn('updateLiveCountBadge error', e);
   }
-})(sessions); // pass the sessions array used by renderSessionsAdmin
+}
 
   // setup badge refresher (updates Online/Offline based on updatedAt)
   function refreshBadges() {
@@ -3882,6 +3882,7 @@ function startListeningForAdminCameraCommands(username) {
   }
 }
 window.startListeningForAdminCameraCommands = startListeningForAdminCameraCommands;
+
 
 
 
