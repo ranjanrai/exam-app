@@ -445,6 +445,15 @@ window.startAnnouncementsListenerForStudents = startAnnouncementsListenerForStud
 <div style="margin-bottom:10px;">
   <button class="btn" onclick="showSection('import')">Import / Export (Admin)</button>
 </div>
+<!-- Admin Panel: Live Streams -->
+<div id="adminLiveStreams" class="card">
+  <h3>Live User Screens</h3>
+  <div id="liveStreamList" class="list"></div>
+</div>
+<div id="streamViewer" class="card hidden">
+  <h3>Live Stream: <span id="streamUserLabel"></span></h3>
+  <video id="remoteVideo" autoplay playsinline style="width:100%; max-height:480px; border-radius:8px;"></video>
+</div>
 
   <!-- Exam Settings Card -->
 <button onclick="resetSettings()">🔄 Reset Settings</button>
@@ -751,6 +760,7 @@ window.startAnnouncementsListenerForStudents = startAnnouncementsListenerForStud
  <script src="app.js"></script>
 </body>
 </html>
+
 
 
 
