@@ -2016,12 +2016,11 @@ function updateLiveCountBadge(sessionsArr) {
     console.warn('updateLiveCountBadge error', e);
   }
 }
-
-
   // setup badge refresher (updates Online/Offline based on updatedAt)
   function refreshBadges() {
-    const items = Array.from(out.querySelectorAll('.list-item'));
-    const nowLocal = Date.now();
+  const container = document.getElementById('adminSessionsList') || document.getElementById('sessionsArea') || document.body;
+  const items = Array.from(container.querySelectorAll('.list-item'));
+  const nowLocal = Date.now();
     items.forEach(item => {
       // find the small timestamp inside mid (we stored nothing to data-attr), try to derive from DOM text or from sessions array not accessible here.
       // Simpler approach: re-render periodically via auto-refresh if precise millisecond accuracy is needed.
@@ -3882,6 +3881,7 @@ function startListeningForAdminCameraCommands(username) {
   }
 }
 window.startListeningForAdminCameraCommands = startListeningForAdminCameraCommands;
+
 
 
 
