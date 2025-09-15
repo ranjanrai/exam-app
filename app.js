@@ -1979,6 +1979,140 @@ async function renderSessionsAdmin() {
     wrapper.appendChild(actions);
     out.appendChild(wrapper);
   });
+  // Admin: start watching a user's screen/camera stream via screenSignals/{username}
+let _adminPC = null;
+let _adminUnsubs = [];
+
+async function adminStartWatch(usernameOverride) {
+  // try to read username from param or UI
+  const username = (usernameOverride && usernameOverride.trim()) || (document.getElementById('adminWatchUsername') && document.getElementById('adminWatchUsername').value.trim());
+  const statusEl = document.getElementById('adminWatchStatus');
+  if (!username) {
+    if (statusEl) statusEl.textContent = 'Enter username to watch.';
+    return;
+  }
+  if (statusEl) statusEl.textContent = `Attempting to watch ${username}...`;
+
+  try {
+    // cleanup any existing
+    adminStopWatch();
+
+    const RTC_CONFIG = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
+    const pc = new RTCPeerConnection(RTC_CONFIG);
+    _adminPC = pc;
+
+    // attach remote tracks to adminRemoteVideo
+    const remoteVideo = document.getElementById('adminRemoteVideo');
+    const remoteStream = new MediaStream();
+    if (remoteVideo) remoteVideo.srcObject = remoteStream;
+
+    pc.ontrack = (ev) => {
+      // add incoming tracks to the remote stream
+      ev.streams.forEach(s => {
+        s.getTracks().forEach(t => remoteStream.addTrack(t));
+      });
+    };
+
+    // send our ICE candidates to screenSignals/{username}/answerCandidates
+    const callDoc = doc(collection(db, "screenSignals"), username);
+    const answerCandidatesCol = collection(callDoc, "answerCandidates");
+    pc.onicecandidate = event => {
+      if (event.candidate) {
+        try {
+          addDoc(answerCandidatesCol, event.candidate.toJSON()).catch(e => {
+            console.warn("addDoc(answerCandidates) failed:", e);
+          });
+        } catch (e) {
+          console.warn("Failed to write admin candidate:", e);
+        }
+      }
+    };
+
+    // read the offer doc and respond
+    const offerRef = callDoc;
+    const offerSnap = await getDoc(offerRef);
+    if (!offerSnap.exists()) {
+      if (statusEl) statusEl.textContent = 'No active offer found for that username (user not streaming). Listening...';
+      // still attach onSnapshot to wait for future offer
+    }
+
+    // subscribe to offer doc changes — when offer appears, setRemoteDescription & create+send answer
+    const unsubOffer = onSnapshot(offerRef, async snap => {
+      if (!snap.exists) return;
+      const data = snap.data();
+      if (!data || !data.offer) return;
+      const offer = data.offer;
+      try {
+        // set remote (user's) offer
+        await pc.setRemoteDescription(new RTCSessionDescription({ type: offer.type, sdp: offer.sdp }));
+        console.log("✅ Admin setRemoteDescription (offer)");
+
+        // create answer and set local
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+
+        // write answer into same doc
+        await setDoc(offerRef, { answer: { type: answer.type, sdp: answer.sdp, createdAt: Date.now() } }, { merge: true });
+
+        if (statusEl) statusEl.textContent = `Watching ${username} — answer sent.`;
+      } catch (err) {
+        console.warn("adminOffer handling failed", err);
+        if (statusEl) statusEl.textContent = 'Failed to respond to offer: see console.';
+      }
+    }, err => {
+      console.warn("offer onSnapshot err:", err);
+    });
+
+    // listen for user's ICE candidates (they write to offerCandidates)
+    const userCandsCol = collection(callDoc, "offerCandidates");
+    const unsubUserCands = onSnapshot(userCandsCol, snap => {
+      snap.docChanges().forEach(async change => {
+        if (change.type === 'added') {
+          const d = change.doc.data();
+          if (d) {
+            try {
+              await pc.addIceCandidate(new RTCIceCandidate(d));
+            } catch (e) { console.warn("addIceCandidate(admin) failed:", e); }
+          }
+        }
+      });
+    });
+
+    _adminUnsubs.push(unsubOffer, unsubUserCands);
+
+    if (statusEl) statusEl.textContent = `Listening for offer / candidates for ${username}...`;
+  } catch (err) {
+    console.error("adminStartWatch failed:", err);
+    const statusEl = document.getElementById('adminWatchStatus');
+    if (statusEl) statusEl.textContent = 'Failed to start watch — see console.';
+  }
+}
+
+function adminStopWatch() {
+  try {
+    if (_adminPC) {
+      // stop incoming tracks
+      const receivers = _adminPC.getReceivers ? _adminPC.getReceivers() : [];
+      receivers.forEach(r => { try { if (r.track) r.track.stop(); } catch(e){} });
+      try { _adminPC.close(); } catch(e) {}
+      _adminPC = null;
+    }
+    // unsubscribe snapshot listeners
+    _adminUnsubs.forEach(u => { try { if (typeof u === 'function') u(); } catch(e){} });
+    _adminUnsubs = [];
+    const rv = document.getElementById('adminRemoteVideo'); if (rv) rv.srcObject = null;
+    const st = document.getElementById('adminWatchStatus'); if (st) st.textContent = 'Stopped.';
+  } catch (e) {
+    console.warn("adminStopWatch error:", e);
+  }
+}
+
+// Expose for console/testing / UI hooks
+window.adminStartWatch = adminStartWatch;
+window.adminStopWatch = adminStopWatch;
+window.startExamStream = startExamStream;
+window.stopExamStream = stopExamStream;
+
 // --- add live-count badge update (paste at end of renderSessionsAdmin) ---
 (function updateLiveCountBadge(sessionsArr) {
   try {
@@ -2129,7 +2263,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 });
-
+ // --- Wire admin proctor buttons ---
+  const sBtn = document.getElementById('adminWatchStartBtn');
+  const pBtn = document.getElementById('adminWatchStopBtn');
+  if (sBtn) sBtn.addEventListener('click', () => adminStartWatch());
+  if (pBtn) pBtn.addEventListener('click', () => adminStopWatch());
+});
 
 function clearResults(){ if(!confirm('Clear all results?')) return; results = []; write(K_RESULTS, results); renderResults(); }
 /* Exam Settings */
@@ -3425,67 +3564,193 @@ function hideVisitorMessage() {
   if (span) span.textContent = "";
 }
 
-/* ---------------- LIVE SCREEN STREAMING ---------------- */
-
-// Firestore collections for signaling
-const screenSignals = collection(db, "screenSignals");
 
 /* ---------------- HYBRID EXAM STREAMING ---------------- */
 
+// Hybrid startExamStream: try screen share then camera, publish offer + ICE to screenSignals/{username}
 async function startExamStream(username) {
-  let stream;
-  try {
-    stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-  } catch (err) {
-    console.warn("Screen share not available, falling back to camera:", err);
-    stream = await navigator.mediaDevices.getUserMedia({ video: true });
+  if (!username) {
+    console.warn("startExamStream: missing username");
+    return false;
   }
 
-  const pc = new RTCPeerConnection({
-    iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
-  });
+  // cleanup any previous stream/pc
+  try { await stopExamStream(); } catch(e){}
 
+  const RTC_CONFIG = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
+
+  let stream = null;
+  let usedScreen = false;
+  try {
+    // try screen share first
+    stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+    usedScreen = true;
+    console.log("✔️ Using screen share for stream");
+  } catch (err) {
+    console.warn("Screen share failed / denied — falling back to camera:", err);
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      usedScreen = false;
+      console.log("✔️ Using camera for stream");
+    } catch (err2) {
+      console.error("❌ Failed to acquire any media:", err2);
+      alert("Unable to access screen or camera. Please allow permission and try again.");
+      return false;
+    }
+  }
+
+  // show local preview in user's UI (muted)
+  const previewEl = document.getElementById("remoteVideo");
+  if (previewEl) {
+    previewEl.srcObject = stream;
+    previewEl.muted = true;
+    try { await previewEl.play(); } catch(e) {}
+  }
+
+  // build peer connection
+  const pc = new RTCPeerConnection(RTC_CONFIG);
+  window._userPC = pc; // keep reference for later cleanup
+
+  // add tracks
   stream.getTracks().forEach(track => pc.addTrack(track, stream));
 
-  // Create Firestore doc
+  // Firestore signaling locations
+  // collection(db, "screenSignals") -> doc(username) -> subcollections offerCandidates / answerCandidates
   const callDoc = doc(collection(db, "screenSignals"), username);
-  const offerCandidates = collection(callDoc, "offerCandidates");
-  const answerCandidates = collection(callDoc, "answerCandidates");
+  const offerCandidatesCol = collection(callDoc, "offerCandidates");
+  const answerCandidatesCol = collection(callDoc, "answerCandidates");
 
-  // Save local ICE
+  // onicecandidate -> upload to offerCandidates
   pc.onicecandidate = event => {
     if (event.candidate) {
-      addDoc(offerCandidates, event.candidate.toJSON());
+      try {
+        addDoc(offerCandidatesCol, event.candidate.toJSON()).catch(e => {
+          console.warn("addDoc(offerCandidates) failed:", e);
+        });
+      } catch (e) {
+        console.warn("Failed to write candidate:", e);
+      }
     }
   };
 
-  // Create and set offer
-  const offerDescription = await pc.createOffer();
-  await pc.setLocalDescription(offerDescription);
+  // diagnostic
+  pc.onconnectionstatechange = () => {
+    console.log("PC state:", pc.connectionState);
+  };
 
-  await setDoc(callDoc, { offer: { sdp: offerDescription.sdp, type: offerDescription.type } });
+  try {
+    // create offer and set local description
+    const offerDescription = await pc.createOffer();
+    await pc.setLocalDescription(offerDescription);
 
-  // Listen for answer
-  onSnapshot(callDoc, async snap => {
-    const data = snap.data();
-    if (!pc.currentRemoteDescription && data?.answer) {
-      const answerDescription = new RTCSessionDescription(data.answer);
-      await pc.setRemoteDescription(answerDescription);
-    }
-  });
-
-  // Listen for answer ICE
-  onSnapshot(answerCandidates, snap => {
-    snap.docChanges().forEach(change => {
-      if (change.type === "added") {
-        const candidate = new RTCIceCandidate(change.doc.data());
-        pc.addIceCandidate(candidate);
+    // write offer doc (overwrites previous)
+    await setDoc(callDoc, {
+      offer: {
+        type: offerDescription.type,
+        sdp: offerDescription.sdp,
+        usedScreen: !!usedScreen,
+        createdAt: Date.now()
       }
     });
-  });
 
-  console.log("📡 Stream started for", username);
+    console.log("📡 Published offer to screenSignals/", username);
+
+    // listen for answer doc — set remote description when available
+    const unsubAnswerDoc = onSnapshot(callDoc, async snap => {
+      const data = snap.exists() ? snap.data() : null;
+      if (!data) return;
+      if (data.answer && pc && pc.signalingState !== "closed") {
+        try {
+          // avoid resetting if already set to same SDP
+          const answer = data.answer;
+          if (!pc.currentRemoteDescription || pc.currentRemoteDescription.sdp !== answer.sdp) {
+            const answerDesc = new RTCSessionDescription({ type: answer.type, sdp: answer.sdp });
+            await pc.setRemoteDescription(answerDesc);
+            console.log("✅ Remote answer applied from Firestore");
+          }
+        } catch (err) {
+          console.warn("Failed to set remote description (answer):", err);
+        }
+      }
+    });
+
+    // listen for admin answer ICE candidates (admins write into answerCandidates)
+    const unsubAnswerCandidates = onSnapshot(answerCandidatesCol, snap => {
+      snap.docChanges().forEach(async change => {
+        if (change.type === "added") {
+          const cand = change.doc.data();
+          if (cand) {
+            try {
+              await pc.addIceCandidate(new RTCIceCandidate(cand));
+              console.log("➕ Added remote ICE candidate from admin");
+            } catch (e) {
+              console.warn("addIceCandidate failed for admin candidate:", e);
+            }
+          }
+        }
+      });
+    });
+
+    // save references for cleanup
+    window._userSignaling = {
+      callDocRef: callDoc,
+      offerCandidatesColRef: offerCandidatesCol,
+      answerCandidatesColRef: answerCandidatesCol,
+      unsubAnswerDoc,
+      unsubAnswerCandidates,
+      usedScreen
+    };
+
+    console.log("📡 Stream started and signaling listeners attached for", username);
+    return true;
+  } catch (err) {
+    console.error("startExamStream failed during signaling:", err);
+    // cleanup on error
+    try {
+      if (window._userSignaling) {
+        try { window._userSignaling.unsubAnswerDoc && window._userSignaling.unsubAnswerDoc(); } catch(e){}
+        try { window._userSignaling.unsubAnswerCandidates && window._userSignaling.unsubAnswerCandidates(); } catch(e){}
+        window._userSignaling = null;
+      }
+      if (pc) { pc.close(); window._userPC = null; }
+      if (previewEl) { previewEl.srcObject = null; }
+      stream.getTracks().forEach(t => { try { t.stop(); } catch(e){} });
+    } catch(e){}
+    return false;
+  }
 }
+// Stop/cleanup helper (complements the above)
+async function stopExamStream() {
+  try {
+    // stop preview element
+    const previewEl = document.getElementById("remoteVideo");
+    if (previewEl) {
+      try { previewEl.pause(); } catch(e){}
+      previewEl.srcObject = null;
+    }
+
+    // stop outgoing media tracks and close pc
+    if (window._userPC) {
+      try {
+        const senders = window._userPC.getSenders ? window._userPC.getSenders() : [];
+        senders.forEach(s => { try { if (s.track) s.track.stop(); } catch(e){} });
+      } catch(e){}
+      try { window._userPC.close(); } catch(e){}
+      window._userPC = null;
+    }
+
+    // unsubscribe listeners
+    if (window._userSignaling) {
+      try { window._userSignaling.unsubAnswerDoc && window._userSignaling.unsubAnswerDoc(); } catch(e){}
+      try { window._userSignaling.unsubAnswerCandidates && window._userSignaling.unsubAnswerCandidates(); } catch(e){}
+      window._userSignaling = null;
+    }
+  } catch (err) {
+    console.warn("stopExamStream cleanup error:", err);
+  }
+}
+
+
 
 async function viewUserScreen(username) {
   const pc = new RTCPeerConnection({
@@ -3538,6 +3803,7 @@ async function viewUserScreen(username) {
   document.getElementById("streamUserLabel").textContent = username;
   document.getElementById("streamViewer").classList.remove("hidden");
 }
+
 
 
 
