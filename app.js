@@ -2028,7 +2028,7 @@ async function renderSessionsAdmin() {
   refreshBadges();
 
   // done
-}
+
 
 
 // View session detail (simple modal-like alert or console), you can expand to fancy modal
@@ -3879,6 +3879,7 @@ function startListeningForAdminCameraCommands(username) {
   }
 }
 window.startListeningForAdminCameraCommands = startListeningForAdminCameraCommands;
+
 
 
 
