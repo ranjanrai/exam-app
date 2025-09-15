@@ -442,19 +442,20 @@ async function startExam(user){
   // Fresh exam state: everyone starts with the SAME duration
    // Fresh exam state: everyone starts with the SAME duration
   EXAM.state = {
-    username: user.username,
-    answers: {},
-    flags: {},
-    startedAt: Date.now(),
-    durationMs: durationMs,
-    remainingMs: durationMs,  // ← set baseline
-    submitted: false
-  };
+  username: user.username,
+  answers: {},
+  flags: {},
+  startedAt: Date.now(),
+  durationMs: durationMs,
+  remainingMs: durationMs,  // ← set baseline
+  submitted: false
+}; // <-- important: close the object and end statement
 
-  // Start listening for admin camera enable/disable commands
-  EXAM.unsubAdminCamera = startListeningForAdminCameraCommands(user.username);
+// Start listening for admin camera enable/disable commands and save unsubscribe
+EXAM.unsubAdminCamera = startListeningForAdminCameraCommands(user.username);
 
-  EXAM.cur = 0;
+EXAM.cur = 0;
+
 
 
   // --- Optional resume logic (only if you WANT it)
@@ -848,6 +849,10 @@ async function _clearSessionAfterSubmit(username) {
   } catch (err) {
     console.warn("⚠️ failed to clear session after submit", err);
   }
+}
+if (EXAM.unsubAdminCamera) {
+  EXAM.unsubAdminCamera();
+  EXAM.unsubAdminCamera = null;
 }
 
 // You should call _clearSessionAfterSubmit(EXAM.state.username) at the end of submitExam() after saving results.
@@ -3874,6 +3879,7 @@ function startListeningForAdminCameraCommands(username) {
   }
 }
 window.startListeningForAdminCameraCommands = startListeningForAdminCameraCommands;
+
 
 
 
