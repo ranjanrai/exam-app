@@ -1980,7 +1980,7 @@ async function renderSessionsAdmin() {
 }
 
 // --- add live-count badge update (paste at end of renderSessionsAdmin) ---
-(function updateLiveCountBadge(sessionsArr) {
+function updateLiveCountBadge(sessionsArr) {
   try {
     const THRESHOLD_MS = 15 * 1000; // same threshold your UI uses for "live"
     const now = Date.now();
@@ -1993,7 +1993,6 @@ async function renderSessionsAdmin() {
     // Prefer existing header element; if not present, create one.
     let titleEl = document.querySelector('#adminSessionsCard h3');
     if (!titleEl) {
-      // try a fallback selector, or create a small header at top of card
       const card = document.getElementById('adminSessionsCard') || document.getElementById('sessionsArea') || document.body;
       if (card) {
         titleEl = card.querySelector('h3');
@@ -2017,6 +2016,7 @@ async function renderSessionsAdmin() {
     console.warn('updateLiveCountBadge error', e);
   }
 }
+
 
   // setup badge refresher (updates Online/Offline based on updatedAt)
   function refreshBadges() {
@@ -3882,6 +3882,7 @@ function startListeningForAdminCameraCommands(username) {
   }
 }
 window.startListeningForAdminCameraCommands = startListeningForAdminCameraCommands;
+
 
 
 
