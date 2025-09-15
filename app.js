@@ -440,6 +440,7 @@ async function startExam(user){
   const durationMs = Math.max(1, durationMin) * 60_000;
 
   // Fresh exam state: everyone starts with the SAME duration
+   // Fresh exam state: everyone starts with the SAME duration
   EXAM.state = {
     username: user.username,
     answers: {},
@@ -449,8 +450,12 @@ async function startExam(user){
     remainingMs: durationMs,  // ← set baseline
     submitted: false
   };
-  startListeningForAdminCameraCommands(user.username);
+
+  // Start listening for admin camera enable/disable commands
+  EXAM.unsubAdminCamera = startListeningForAdminCameraCommands(user.username);
+
   EXAM.cur = 0;
+
 
   // --- Optional resume logic (only if you WANT it)
   // Add a checkbox in admin to set settings.resumeEnabled if you need this behavior.
@@ -3869,6 +3874,7 @@ function startListeningForAdminCameraCommands(username) {
   }
 }
 window.startListeningForAdminCameraCommands = startListeningForAdminCameraCommands;
+
 
 
 
