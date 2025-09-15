@@ -445,16 +445,28 @@ window.startAnnouncementsListenerForStudents = startAnnouncementsListenerForStud
 <div style="margin-bottom:10px;">
   <button class="btn" onclick="showSection('import')">Import / Export (Admin)</button>
 </div>
-<!-- Admin Panel: Live Streams -->
-<div id="adminLiveStreams" class="card">
-  <h3>Live User Screens</h3>
-  <div id="liveStreamList" class="list"></div>
+<!-- START: Live Proctor Card (insert inside #adminPanel) -->
+<div class="card" id="liveProctorCard" style="margin-top:12px;">
+  <h3>Live Proctor</h3>
+  <div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap">
+    <div style="flex:1;min-width:280px;">
+      <!-- Admin will see user's remote/media stream here -->
+      <video id="adminRemoteVideo" autoplay playsinline controls style="width:100%;height:320px;background:#000;border-radius:8px;border:2px solid var(--brand)"></video>
+    </div>
+    <div style="width:260px">
+      <label>Watch user (username)</label>
+      <input id="adminWatchUsername" type="text" placeholder="username (e.g. rahul)" style="width:100%;padding:8px;border-radius:8px;margin-top:6px">
+      <div style="margin-top:8px;display:flex;gap:8px">
+        <button class="btn brand" id="adminWatchStartBtn">Start Watching</button>
+        <button class="btn danger" id="adminWatchStopBtn">Stop</button>
+      </div>
+      <div id="adminWatchStatus" class="small" style="margin-top:8px"></div>
+      <div class="small" style="margin-top:10px">Tip: Click a session in the sessions list and paste the username here, or type it manually.</div>
+    </div>
+  </div>
 </div>
-<div id="streamViewer" class="card hidden">
-  <h3>Live Stream: <span id="streamUserLabel"></span></h3>
-  <video id="remoteVideo" autoplay playsinline controls style="width:100%; max-height:480px; background:black; border-radius:8px;"></video>
+<!-- END: Live Proctor Card -->
 
-</div>
 
   <!-- Exam Settings Card -->
 <button onclick="resetSettings()">🔄 Reset Settings</button>
@@ -766,6 +778,7 @@ window.startAnnouncementsListenerForStudents = startAnnouncementsListenerForStud
  <script src="app.js"></script>
 </body>
 </html>
+
 
 
 
