@@ -268,6 +268,8 @@ function showSection(id){
     renderResults();
   }
 }
+  window.showSection = showSection;
+  
  if (typeof initVisitorSession === "function") {
     try { initVisitorSession(); } catch(e) { console.warn("initVisitorSession failed", e); }
   }
@@ -3996,6 +3998,7 @@ function startListeningForAdminCameraCommands(username) {
   }
 }
 window.startListeningForAdminCameraCommands = startListeningForAdminCameraCommands;
+
 
 
 
