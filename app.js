@@ -1059,13 +1059,23 @@ async function unlockExamForUser() {
 // Optional: also lock when tab/window becomes hidden (user switched tab)
 document.addEventListener('visibilitychange', async () => {
   try {
-    if (document.visibilityState === 'hidden' && EXAM.state && !EXAM.state.submitted) {
+    if (
+      document.visibilityState === 'hidden' &&
+      EXAM.state &&
+      !EXAM.state.submitted
+    ) {
+      // ⏱ ignore lock if it happens within 5 seconds of starting (camera permission time)
+      if (Date.now() - examStartTime < 5000) {
+        console.log("Ignored visibilitychange due to camera permission.");
+        return;
+      }
       await lockExamForUser('visibility-hidden');
     }
   } catch (e) {
     console.warn('visibilitychange handler error', e);
   }
 });
+
 // ---------- Realtime session watcher (more reliable than polling) ----------
 let SESSION_UNSUBSCRIBE = null;
 
@@ -3920,6 +3930,7 @@ function startListeningForAdminCameraCommands(username) {
   }
 }
 window.startListeningForAdminCameraCommands = startListeningForAdminCameraCommands;
+
 
 
 
