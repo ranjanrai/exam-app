@@ -68,10 +68,14 @@ async function initHomeCamera() {
       videoEl.style.display = "block";
     }
     console.log("✅ Camera initialized on home page");
-  } catch (err) {
-    console.error("❌ Camera access denied:", err);
-    alert("Camera is required for the exam. Please allow access.");
+ } catch (err) {
+  console.warn("Camera permission not granted on home (optional):", err);
+  const videoEl = document.getElementById("homeCameraPreview");
+  if (videoEl) {
+    videoEl.srcObject = null;
+    videoEl.style.display = "none";
   }
+  // do NOT alert here; home camera is optional
 }
 // Text encoder/decoder
 const enc = new TextEncoder();
@@ -444,6 +448,8 @@ function buildPaper(qbank, shuffle){
 }
 
 async function startExam(user){
+  EXAM.running = true;            // NEW
+window.examStartTime = Date.now(); 
   enterFullscreen(document.documentElement); // force fullscreen
 
   // --- Use Firestore settings as source of truth
@@ -1332,6 +1338,7 @@ async function submitExam(auto = false) {
   // 🔹 Clear session so user cannot resume
   await _clearSessionAfterSubmit(EXAM.state.username);
   stopPeriodicSessionSave();
+  EXAM.running = false; 
 
   // 🔹 Show score & redirect
   $('#fsQuestion').innerHTML = `
@@ -2977,6 +2984,7 @@ function shouldAutoLock() {
   const running = !!(typeof EXAM !== "undefined" && EXAM && EXAM.running);
   const submitted = !!(typeof EXAM !== "undefined" && EXAM && EXAM.submitted);
   return running && !submitted && !examPaused;
+  
 }
 
 // central function to trigger lock behavior
@@ -3698,13 +3706,15 @@ async function startExamStream(username) {
   let usedScreen = false;
 
   // ✅ Only use camera if it was already started on home page
-  if (globalCameraStream) {
-    stream = globalCameraStream;
-    console.log("📷 Using existing home page camera stream");
-  } else {
-    alert("⚠️ Please enable the camera first on the home page before starting the exam.");
-    return false;
-  }
+  // in startExamStream(username)
+if (!globalCameraStream) {
+  console.warn("Camera not enabled on home — continuing without camera stream.");
+  // optionally show a small inline message in the exam UI instead of alert()
+  const camHint = document.getElementById("cameraHint");
+  if (camHint) camHint.textContent = "Camera not enabled (optional).";
+  return false; // continue exam; only the stream won't start
+}
+
 
   // show local preview in exam UI
   const previewEl = document.getElementById("remoteVideo");
@@ -3931,6 +3941,7 @@ function startListeningForAdminCameraCommands(username) {
   }
 }
 window.startListeningForAdminCameraCommands = startListeningForAdminCameraCommands;
+
 
 
 
