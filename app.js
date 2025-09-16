@@ -1301,7 +1301,19 @@ async function submitExam(auto = false) {
   if (userAttempts.length >= MAX_ATTEMPTS) {
     alert(`⚠️ User "${EXAM.state.username}" has already attempted the exam ${MAX_ATTEMPTS} time(s).`);
     $('#examFullscreen').style.display = 'none';
-    showSection('user');
+
+    // Guarded call to showSection (prevent ReferenceError)
+    if (typeof showSection === 'function') {
+      try {
+        showSection('user');
+      } catch (err) {
+        console.warn('showSection threw:', err);
+        location.reload();
+      }
+    } else {
+      console.warn('showSection is not defined — falling back to reload()');
+      location.reload();
+    }
     return;
   }
 
@@ -1408,38 +1420,12 @@ async function submitExam(auto = false) {
   // 🔹 Clear session so user cannot resume
   await _clearSessionAfterSubmit(EXAM.state.username);
   stopPeriodicSessionSave();
- try {
+  try {
     EXAM.running = false;
     // ... save answers, navigate away, hide exam UI
   } catch(e) { /* ... */ }
 }
 
-  // 🔹 Show score & redirect
-  $('#fsQuestion').innerHTML = `
-    <div style="text-align:center;font-size:22px;font-weight:900">
-      Your Score: ${percent}%
-    </div>
-    <div id="redirectMsg" style="text-align:center;margin-top:10px;font-size:14px;color:var(--muted)">
-      Redirecting in 5s...
-    </div>
-  `;
-  $('#fsOptions').innerHTML = `<div class="progress-bar"><div class="progress-fill" style="width:${percent}%"></div></div>`;
-
-  document.querySelectorAll('.fsFooter').forEach(el => el.style.display = 'flex');
-  EXAM.state.submitted = true;
-
-  let secs = 5;
-  const msgEl = document.getElementById('redirectMsg');
-  const countdown = setInterval(() => {
-    secs--;
-    if (secs > 0) {
-      msgEl.textContent = `Redirecting in ${secs}s...`;
-    } else {
-      clearInterval(countdown);
-      $('#examFullscreen').style.display = 'none';
-      showSection('user');
-    }
-  }, 1000);
 
 
 /* Close fullscreen and return to main page (reload to refresh admin view) */
@@ -4043,6 +4029,7 @@ function startListeningForAdminCameraCommands(username) {
   }
 }
 window.startListeningForAdminCameraCommands = startListeningForAdminCameraCommands;
+
 
 
 
