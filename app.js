@@ -56,7 +56,23 @@ function escapeHTML(input) {
   });
 }
 window.escapeHTML = escapeHTML; // expose globally if other code expects it
+let globalCameraStream = null;
 
+async function initHomeCamera() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+    globalCameraStream = stream;
+    const videoEl = document.getElementById("homeCameraPreview");
+    if (videoEl) {
+      videoEl.srcObject = stream;
+      videoEl.style.display = "block";
+    }
+    console.log("✅ Camera initialized on home page");
+  } catch (err) {
+    console.error("❌ Camera access denied:", err);
+    alert("Camera is required for the exam. Please allow access.");
+  }
+}
 // Text encoder/decoder
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -285,7 +301,13 @@ document.addEventListener('DOMContentLoaded', ()=> {
   });
 
   // Enter key on home password should trigger login
-  document.getElementById('homePassword').addEventListener('keydown', (e)=>{ if(e.key === 'Enter') document.getElementById('homeLoginBtn').click(); });
+  document.getElementById('homePassword').addEventListener('keydown', (e)=>{ 
+    if(e.key === 'Enter') document.getElementById('homeLoginBtn').click(); 
+  });
+
+  // ✅ Hook up "Enable Camera" button
+  const camBtn = document.getElementById('startCameraBtn');
+  if (camBtn) camBtn.addEventListener('click', initHomeCamera);
 });
 
 
@@ -3676,69 +3698,74 @@ async function startExamStream(username) {
 
   let stream = null;
   let usedScreen = false;
+
   try {
-    // try screen share first
-    stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
-    usedScreen = true;
-    console.log("✔️ Using screen share for stream");
-  } catch (err) {
-    console.warn("Screen share failed / denied — falling back to camera:", err);
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+    // ✅ Use existing global camera stream if available
+    if (globalCameraStream) {
+      stream = globalCameraStream;
       usedScreen = false;
-      console.log("✔️ Using camera for stream");
-    } catch (err2) {
-      console.error("❌ Failed to acquire any media:", err2);
-      alert("Unable to access screen or camera. Please allow permission and try again.");
-      return false;
-    }
-  }
-
-  // show local preview in user's UI (muted)
-  const previewEl = document.getElementById("remoteVideo");
-  if (previewEl) {
-    previewEl.srcObject = stream;
-    previewEl.muted = true;
-    try { await previewEl.play(); } catch(e) {}
-  }
-
-  // build peer connection
-  const pc = new RTCPeerConnection(RTC_CONFIG);
-  window._userPC = pc; // keep reference for later cleanup
-
-  // add tracks
-  stream.getTracks().forEach(track => pc.addTrack(track, stream));
-
-  // Firestore signaling locations
-  // collection(db, "screenSignals") -> doc(username) -> subcollections offerCandidates / answerCandidates
-  const callDoc = doc(collection(db, "screenSignals"), username);
-  const offerCandidatesCol = collection(callDoc, "offerCandidates");
-  const answerCandidatesCol = collection(callDoc, "answerCandidates");
-
-  // onicecandidate -> upload to offerCandidates
-  pc.onicecandidate = event => {
-    if (event.candidate) {
+      console.log("📷 Using existing home page camera stream");
+    } else {
+      // try screen share first
       try {
-        addDoc(offerCandidatesCol, event.candidate.toJSON()).catch(e => {
-          console.warn("addDoc(offerCandidates) failed:", e);
-        });
-      } catch (e) {
-        console.warn("Failed to write candidate:", e);
+        stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+        usedScreen = true;
+        console.log("✔️ Using screen share for stream");
+      } catch (err) {
+        console.warn("Screen share failed / denied — falling back to camera:", err);
+        try {
+          await initHomeCamera(); // fallback: call our home camera initializer
+          stream = globalCameraStream;
+          usedScreen = false;
+          console.log("✔️ Using camera (initialized fallback) for stream");
+        } catch (err2) {
+          console.error("❌ Failed to acquire any media:", err2);
+          alert("Unable to access screen or camera. Please allow permission and try again.");
+          return false;
+        }
       }
     }
-  };
 
-  // diagnostic
-  pc.onconnectionstatechange = () => {
-    console.log("PC state:", pc.connectionState);
-  };
+    // show local preview in user's UI (muted)
+    const previewEl = document.getElementById("remoteVideo");
+    if (previewEl) {
+      previewEl.srcObject = stream;
+      previewEl.muted = true;
+      try { await previewEl.play(); } catch(e) {}
+    }
 
-  try {
+    // build peer connection
+    const pc = new RTCPeerConnection(RTC_CONFIG);
+    window._userPC = pc; // keep reference for later cleanup
+
+    // add tracks
+    stream.getTracks().forEach(track => pc.addTrack(track, stream));
+
+    // Firestore signaling locations
+    const callDoc = doc(collection(db, "screenSignals"), username);
+    const offerCandidatesCol = collection(callDoc, "offerCandidates");
+    const answerCandidatesCol = collection(callDoc, "answerCandidates");
+
+    pc.onicecandidate = event => {
+      if (event.candidate) {
+        try {
+          addDoc(offerCandidatesCol, event.candidate.toJSON()).catch(e => {
+            console.warn("addDoc(offerCandidates) failed:", e);
+          });
+        } catch (e) {
+          console.warn("Failed to write candidate:", e);
+        }
+      }
+    };
+
+    pc.onconnectionstatechange = () => {
+      console.log("PC state:", pc.connectionState);
+    };
+
     // create offer and set local description
     const offerDescription = await pc.createOffer();
     await pc.setLocalDescription(offerDescription);
 
-    // write offer doc (overwrites previous)
     await setDoc(callDoc, {
       offer: {
         type: offerDescription.type,
@@ -3750,13 +3777,12 @@ async function startExamStream(username) {
 
     console.log("📡 Published offer to screenSignals/", username);
 
-    // listen for answer doc — set remote description when available
+    // listen for answer doc
     const unsubAnswerDoc = onSnapshot(callDoc, async snap => {
       const data = snap.exists() ? snap.data() : null;
       if (!data) return;
       if (data.answer && pc && pc.signalingState !== "closed") {
         try {
-          // avoid resetting if already set to same SDP
           const answer = data.answer;
           if (!pc.currentRemoteDescription || pc.currentRemoteDescription.sdp !== answer.sdp) {
             const answerDesc = new RTCSessionDescription({ type: answer.type, sdp: answer.sdp });
@@ -3769,7 +3795,7 @@ async function startExamStream(username) {
       }
     });
 
-    // listen for admin answer ICE candidates (admins write into answerCandidates)
+    // listen for admin ICE candidates
     const unsubAnswerCandidates = onSnapshot(answerCandidatesCol, snap => {
       snap.docChanges().forEach(async change => {
         if (change.type === "added") {
@@ -3800,7 +3826,6 @@ async function startExamStream(username) {
     return true;
   } catch (err) {
     console.error("startExamStream failed during signaling:", err);
-    // cleanup on error
     try {
       if (window._userSignaling) {
         try { window._userSignaling.unsubAnswerDoc && window._userSignaling.unsubAnswerDoc(); } catch(e){}
@@ -3808,12 +3833,14 @@ async function startExamStream(username) {
         window._userSignaling = null;
       }
       if (pc) { pc.close(); window._userPC = null; }
-      if (previewEl) { previewEl.srcObject = null; }
-      stream.getTracks().forEach(t => { try { t.stop(); } catch(e){} });
+      const previewEl = document.getElementById("remoteVideo");
+      if (previewEl) previewEl.srcObject = null;
+      if (stream) stream.getTracks().forEach(t => { try { t.stop(); } catch(e){} });
     } catch(e){}
     return false;
   }
 }
+
 // Stop/cleanup helper (complements the above)
 async function stopExamStream() {
   try {
@@ -3930,6 +3957,7 @@ function startListeningForAdminCameraCommands(username) {
   }
 }
 window.startListeningForAdminCameraCommands = startListeningForAdminCameraCommands;
+
 
 
 
