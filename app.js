@@ -294,38 +294,6 @@ document.addEventListener('DOMContentLoaded', ()=> {
 /* convert File -> base64 data URL */
 function fileToDataURL(file){ return new Promise(res => { const fr = new FileReader(); fr.onload = ()=> res(fr.result); fr.readAsDataURL(file); }); }
 
-/* handle login/register */
-async function handleUserLogin_withResume(){
-  const username = $('#userName').value.trim();
-  const pass = $('#userPass').value;
-  const file = document.getElementById('userPhoto').files[0];
-
-  if(!username || !pass) return alert('Enter username and password');
-
-  let user = users.find(u => u.username === username && u.password === pass);
-  if(!user){
-    if(!file) return alert('New user: upload photo to register');
-    const photo = await fileToDataURL(file);
-    const fullName = username;
-    user = { username, password: pass, photo, fullName };
-    users.push(user);
-    saveToFirestore("users", user.username, user);
-  }
-
-  // ❗ Block users who already attempted
-  const arr = await getResultsArray();
-  if (arr.some(r => r.username === username)) {
-    alert(`⚠️ "${username}" has already attempted the exam.`);
-    return; // stop here, don’t load settings or start exam
-  }
-
-  // ✅ Ensure latest settings (with durationMin) are in memory
-  await loadSettingsFromFirestore();
-
-  // Start the exam
-  startExam(user);
-}
-
 async function getResultsArray() {
   // If memory already has a usable array, return it
   if (Array.isArray(results)) return results;
@@ -1125,15 +1093,6 @@ function startSessionWatcher(username) {
     if (typeof startPausedSessionPolling === 'function') startPausedSessionPolling(username);
   }
 }
-
-// Call this when the exam ends or the user logs out to stop listening
-function stopSessionWatcher() {
-  if (SESSION_UNSUBSCRIBE) {
-    try { SESSION_UNSUBSCRIBE(); } catch (e) { console.warn("stopSessionWatcher unsub error", e); }
-    SESSION_UNSUBSCRIBE = null;
-  }
-}
-
 
 function stopSessionWatcher() {
   try {
@@ -2534,10 +2493,6 @@ function importQuestionsFile(e){
 
 function exportUsers(){ download('users.json', JSON.stringify(users, null, 2), 'application/json'); }
 function exportQuestions(){ download('questions.json', JSON.stringify(questions, null, 2), 'application/json'); }
-function downloadBackup(){
-  const backup = { users, questions, results, admin: read(K_ADMIN, null) };
-  download('backup_offline_mcq.json', JSON.stringify(backup, null, 2), 'application/json');
-}
 
 function exportResultsJSON(){
   if(results.length === 0) return alert('No results to export');
@@ -2649,13 +2604,6 @@ showSection('user');
 renderQuestionsList();
 renderUsersAdmin();
 renderResults();
-
-// Ensure the login button (which calls handleUserLogin()) calls our resume-aware login.
-if (typeof handleUserLogin_withResume === 'function') {
-  window.handleUserLogin = (...args) => handleUserLogin_withResume(...args);
-  // also expose it directly so older code that expects window.handleUserLogin works
-  window.handleUserLogin_withResume = handleUserLogin_withResume;
-}
 
 
 /* Expose a few for console/debug if needed */
@@ -3836,20 +3784,3 @@ async function viewUserScreen(username) {
   document.getElementById("streamUserLabel").textContent = username;
   document.getElementById("streamViewer").classList.remove("hidden");
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
