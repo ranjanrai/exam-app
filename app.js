@@ -508,10 +508,15 @@ EXAM.cur = 0;
   $('#fsName').textContent = user.fullName || user.username;
 
   paintQuestion();
- startExamStream(user.username);
+  startExamStream(user.username);
   startTimer(); // uses EXAM.state.remainingMs
-await saveSessionToFirestore(user.username, EXAM.state, EXAM.paper);
-startPeriodicSessionSave();
+  await saveSessionToFirestore(user.username, EXAM.state, EXAM.paper);
+  startPeriodicSessionSave();
+
+  } catch (err) {
+    console.error("❌ startExam failed:", err);
+    alert("⚠️ Exam could not start. Please contact admin.");
+  }
 }
 
 async function loadTimer(username) {
@@ -3991,6 +3996,7 @@ function startListeningForAdminCameraCommands(username) {
   }
 }
 window.startListeningForAdminCameraCommands = startListeningForAdminCameraCommands;
+
 
 
 
