@@ -3684,14 +3684,12 @@ function hideVisitorMessage() {
 
 /* ---------------- HYBRID EXAM STREAMING ---------------- */
 
-// Hybrid startExamStream: try screen share then camera, publish offer + ICE to screenSignals/{username}
 async function startExamStream(username) {
   if (!username) {
     console.warn("startExamStream: missing username");
     return false;
   }
 
-  // cleanup any previous stream/pc
   try { await stopExamStream(); } catch(e){}
 
   const RTC_CONFIG = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
@@ -3699,70 +3697,52 @@ async function startExamStream(username) {
   let stream = null;
   let usedScreen = false;
 
-  try {
-    // ✅ Use existing global camera stream if available
-    if (globalCameraStream) {
-      stream = globalCameraStream;
-      usedScreen = false;
-      console.log("📷 Using existing home page camera stream");
-    } else {
-      // try screen share first
+  // ✅ Only use camera if it was already started on home page
+  if (globalCameraStream) {
+    stream = globalCameraStream;
+    console.log("📷 Using existing home page camera stream");
+  } else {
+    alert("⚠️ Please enable the camera first on the home page before starting the exam.");
+    return false;
+  }
+
+  // show local preview in exam UI
+  const previewEl = document.getElementById("remoteVideo");
+  if (previewEl) {
+    previewEl.srcObject = stream;
+    previewEl.muted = true;
+    try { await previewEl.play(); } catch(e) {}
+  }
+
+  // build peer connection
+  const pc = new RTCPeerConnection(RTC_CONFIG);
+  window._userPC = pc;
+
+  // add tracks
+  stream.getTracks().forEach(track => pc.addTrack(track, stream));
+
+  // Firestore signaling
+  const callDoc = doc(collection(db, "screenSignals"), username);
+  const offerCandidatesCol = collection(callDoc, "offerCandidates");
+  const answerCandidatesCol = collection(callDoc, "answerCandidates");
+
+  pc.onicecandidate = event => {
+    if (event.candidate) {
       try {
-        stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
-        usedScreen = true;
-        console.log("✔️ Using screen share for stream");
-      } catch (err) {
-        console.warn("Screen share failed / denied — falling back to camera:", err);
-        try {
-          await initHomeCamera(); // fallback: call our home camera initializer
-          stream = globalCameraStream;
-          usedScreen = false;
-          console.log("✔️ Using camera (initialized fallback) for stream");
-        } catch (err2) {
-          console.error("❌ Failed to acquire any media:", err2);
-          alert("Unable to access screen or camera. Please allow permission and try again.");
-          return false;
-        }
+        addDoc(offerCandidatesCol, event.candidate.toJSON()).catch(e => {
+          console.warn("addDoc(offerCandidates) failed:", e);
+        });
+      } catch (e) {
+        console.warn("Failed to write candidate:", e);
       }
     }
+  };
 
-    // show local preview in user's UI (muted)
-    const previewEl = document.getElementById("remoteVideo");
-    if (previewEl) {
-      previewEl.srcObject = stream;
-      previewEl.muted = true;
-      try { await previewEl.play(); } catch(e) {}
-    }
+  pc.onconnectionstatechange = () => {
+    console.log("PC state:", pc.connectionState);
+  };
 
-    // build peer connection
-    const pc = new RTCPeerConnection(RTC_CONFIG);
-    window._userPC = pc; // keep reference for later cleanup
-
-    // add tracks
-    stream.getTracks().forEach(track => pc.addTrack(track, stream));
-
-    // Firestore signaling locations
-    const callDoc = doc(collection(db, "screenSignals"), username);
-    const offerCandidatesCol = collection(callDoc, "offerCandidates");
-    const answerCandidatesCol = collection(callDoc, "answerCandidates");
-
-    pc.onicecandidate = event => {
-      if (event.candidate) {
-        try {
-          addDoc(offerCandidatesCol, event.candidate.toJSON()).catch(e => {
-            console.warn("addDoc(offerCandidates) failed:", e);
-          });
-        } catch (e) {
-          console.warn("Failed to write candidate:", e);
-        }
-      }
-    };
-
-    pc.onconnectionstatechange = () => {
-      console.log("PC state:", pc.connectionState);
-    };
-
-    // create offer and set local description
+  try {
     const offerDescription = await pc.createOffer();
     await pc.setLocalDescription(offerDescription);
 
@@ -3770,14 +3750,13 @@ async function startExamStream(username) {
       offer: {
         type: offerDescription.type,
         sdp: offerDescription.sdp,
-        usedScreen: !!usedScreen,
+        usedScreen: false,
         createdAt: Date.now()
       }
     });
 
     console.log("📡 Published offer to screenSignals/", username);
 
-    // listen for answer doc
     const unsubAnswerDoc = onSnapshot(callDoc, async snap => {
       const data = snap.exists() ? snap.data() : null;
       if (!data) return;
@@ -3795,7 +3774,6 @@ async function startExamStream(username) {
       }
     });
 
-    // listen for admin ICE candidates
     const unsubAnswerCandidates = onSnapshot(answerCandidatesCol, snap => {
       snap.docChanges().forEach(async change => {
         if (change.type === "added") {
@@ -3812,7 +3790,6 @@ async function startExamStream(username) {
       });
     });
 
-    // save references for cleanup
     window._userSignaling = {
       callDocRef: callDoc,
       offerCandidatesColRef: offerCandidatesCol,
@@ -3835,7 +3812,6 @@ async function startExamStream(username) {
       if (pc) { pc.close(); window._userPC = null; }
       const previewEl = document.getElementById("remoteVideo");
       if (previewEl) previewEl.srcObject = null;
-      if (stream) stream.getTracks().forEach(t => { try { t.stop(); } catch(e){} });
     } catch(e){}
     return false;
   }
@@ -3871,8 +3847,6 @@ async function stopExamStream() {
     console.warn("stopExamStream cleanup error:", err);
   }
 }
-
-
 
 async function viewUserScreen(username) {
   const pc = new RTCPeerConnection({
@@ -3957,6 +3931,7 @@ function startListeningForAdminCameraCommands(username) {
   }
 }
 window.startListeningForAdminCameraCommands = startListeningForAdminCameraCommands;
+
 
 
 
