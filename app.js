@@ -448,8 +448,10 @@ function buildPaper(qbank, shuffle){
 }
 
 async function startExam(user){
-  EXAM.running = true;            // NEW
-window.examStartTime = Date.now(); 
+ try {
+    // mark exam as active
+    EXAM.running = true;
+    window.examStartTime = Date.now();
   enterFullscreen(document.documentElement); // force fullscreen
 
   // --- Use Firestore settings as source of truth
@@ -1041,12 +1043,14 @@ async function unlockExamForUser() {
       updatedAt: Date.now()
     };
 
-    // prefer existing helper (merges); otherwise fall back to setDoc
+    // prefer existing helper (merges); otherwise fall back to setDoc (defensive)
     if (typeof saveSessionToFirestore === 'function') {
-      // pass explicit locked:false so saveSessionToFirestore keeps it
-     await saveSessionToFirestore(username, { ...EXAM.state, ...payload }, EXAM.paper);
-    } else {
+      await saveSessionToFirestore(username, { ...EXAM.state, ...payload }, EXAM.paper);
+    } else if (typeof setDoc === 'function' && typeof doc === 'function' && typeof db !== 'undefined') {
+      // merge:true behavior — if your setDoc helper expects different args adjust accordingly
       await setDoc(doc(db, "sessions", username), payload, { merge: true });
+    } else {
+      console.warn("unlockExamForUser: no server persistence available (saveSessionToFirestore/setDoc missing).");
     }
   } catch (err) {
     console.warn("unlockExamForUser: failed to persist session", err);
@@ -1055,16 +1059,19 @@ async function unlockExamForUser() {
   // hide lock UI locally (works whether you use $ or plain DOM)
   try {
     const el = document.getElementById('lockScreen');
-    if (el) el.style.display = 'none';
+    if (el) {
+      // small delay to avoid instant flicker if admin toggles quickly
+      setTimeout(() => { try { el.style.display = 'none'; } catch(e){} }, 150);
+    }
   } catch (e) { /* ignore */ }
 
   // If this client was the locked user, resume timer/UI
   try {
     if (EXAM && EXAM.state && EXAM.state.username === username) {
-      if (examPaused) {
-        examPaused = false;
-        try { startTimer(); } catch (e) { console.warn("startTimer failed:", e); }
-        try { startPeriodicSessionSave(); } catch (e) {}
+      if (window.examPaused) {
+        window.examPaused = false;
+        try { if (typeof startTimer === 'function') startTimer(); } catch (e) { console.warn("startTimer failed:", e); }
+        try { if (typeof startPeriodicSessionSave === 'function') startPeriodicSessionSave(); } catch (e) {}
       }
       EXAM.state.locked = false;
     }
@@ -1077,7 +1084,7 @@ async function unlockExamForUser() {
     try { renderSessionsAdmin(); } catch (e) { console.warn(e); }
   }
 
-  // Stop only the poller fallback (keep realtime watcher active)
+  // Stop only the poller fallback (keep realtime watcher active if you have one)
   if (typeof stopPausedSessionPolling === 'function') stopPausedSessionPolling();
 
   // IMPORTANT: DO NOT call stopSessionWatcher() here.
@@ -1089,20 +1096,39 @@ document.addEventListener('visibilitychange', async () => {
   try {
     if (
       document.visibilityState === 'hidden' &&
-      EXAM.state &&
+      EXAM?.state &&
       !EXAM.state.submitted
     ) {
       // ⏱ ignore lock if it happens within 5 seconds of starting (camera permission time)
-      if (Date.now() - examStartTime < 5000) {
-        console.log("Ignored visibilitychange due to camera permission.");
+      const start = (typeof window.examStartTime === 'number') ? window.examStartTime : 0;
+      if (Date.now() - start < 5000) {
+        console.log("Ignored visibilitychange due to camera permission grace window.");
         return;
       }
-      await lockExamForUser('visibility-hidden');
+
+      // show UI immediately (defensive) so user sees change
+      if (typeof showLockScreen === 'function') {
+        try { showLockScreen('Tab hidden'); } catch (e) { console.warn("showLockScreen error:", e); }
+      } else {
+        // fallback: make sure examPaused is set so triggerAutoLock() won't race
+        window.examPaused = true;
+      }
+
+      // call your lock routine (should set locked:true, save session, start polling)
+      if (typeof lockExamForUser === 'function') {
+        await lockExamForUser('visibility-hidden');
+      } else if (typeof triggerAutoLock === 'function') {
+        // triggerAutoLock will check shouldAutoLock() and perform fallback behavior
+        triggerAutoLock('visibility-hidden');
+      } else {
+        console.warn("No lockExamForUser/triggerAutoLock available to handle visibilitychange.");
+      }
     }
   } catch (e) {
     console.warn('visibilitychange handler error', e);
   }
 });
+
 
 // ---------- Realtime session watcher (more reliable than polling) ----------
 let SESSION_UNSUBSCRIBE = null;
@@ -1338,7 +1364,11 @@ async function submitExam(auto = false) {
   // 🔹 Clear session so user cannot resume
   await _clearSessionAfterSubmit(EXAM.state.username);
   stopPeriodicSessionSave();
-  EXAM.running = false; 
+ try {
+    EXAM.running = false;
+    // ... save answers, navigate away, hide exam UI
+  } catch(e) { /* ... */ }
+}
 
   // 🔹 Show score & redirect
   $('#fsQuestion').innerHTML = `
@@ -2981,30 +3011,50 @@ function shouldAutoLock() {
   // - EXAM.running: (true if exam in progress) - replace if you use another flag
   // - EXAM.submitted: (true if exam already submitted)
   // - examPaused: local paused flag
-  const running = !!(typeof EXAM !== "undefined" && EXAM && EXAM.running);
-  const submitted = !!(typeof EXAM !== "undefined" && EXAM && EXAM.submitted);
-  return running && !submitted && !examPaused;
-  
+  try {
+    const running = !!(typeof EXAM !== "undefined" && EXAM && EXAM.running);
+    const submitted = !!(typeof EXAM !== "undefined" && EXAM && EXAM.state && EXAM.state.submitted);
+    return running && !submitted && !window.examPaused;
+  } catch (e) {
+    console.error("shouldAutoLock error:", e);
+    return false;
+  }
 }
 
-// central function to trigger lock behavior
 function triggerAutoLock(reason) {
   try {
     console.log("Auto-lock triggered:", reason);
-    // if exam already paused/locked, ignore
-    if (!shouldAutoLock()) return;
-    // call existing pause logic (which should save locked:true and show lock screen)
-    // if you used a different name for pause handler, replace pauseExam() accordingly
+
+    // if exam already paused/locked or not in a state that should lock, ignore
+    if (!shouldAutoLock()) {
+      console.log("Auto-lock skipped (not running or already paused/submitted).");
+      return;
+    }
+
+    // Prefer your app's pause logic if available (so all side-effects remain consistent)
     if (typeof pauseExam === "function") {
-      pauseExam();
-    } else {
-      // fallback: set local flags + show lock UI + save session
-      examPaused = true;
-      if (document.getElementById("lockScreen")) document.getElementById("lockScreen").style.display = "flex";
-      if (EXAM && EXAM.state && EXAM.state.username) {
-        saveSessionToFirestore(EXAM.state.username, { ...EXAM.state, locked: true }, EXAM.paper).catch(e=>console.warn(e));
-      }
-      startPausedSessionPolling();
+      pauseExam(reason);
+      return;
+    }
+
+    // Fallback lock behavior
+    window.examPaused = true;
+
+    // show lock UI if present
+    const lockEl = document.getElementById("lockScreen");
+    if (lockEl) lockEl.style.display = "flex";
+
+    // persist locked state (defensive checks)
+    const username = EXAM && EXAM.state && EXAM.state.username;
+    if (username && typeof saveSessionToFirestore === "function") {
+      // make sure EXAM.state is an object before spreading
+      const stateToSave = (EXAM.state && typeof EXAM.state === "object") ? { ...EXAM.state, locked: true } : { locked: true };
+      saveSessionToFirestore(username, stateToSave, EXAM.paper).catch(e => console.warn("saveSessionToFirestore (lock) failed:", e));
+    }
+
+    // start any polling required to detect unlock or admin resume
+    if (typeof startPausedSessionPolling === "function") {
+      startPausedSessionPolling(EXAM?.state?.username);
     }
   } catch (e) {
     console.error("triggerAutoLock error:", e);
@@ -3941,6 +3991,7 @@ function startListeningForAdminCameraCommands(username) {
   }
 }
 window.startListeningForAdminCameraCommands = startListeningForAdminCameraCommands;
+
 
 
 
