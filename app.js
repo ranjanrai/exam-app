@@ -2810,10 +2810,18 @@ function importSettingsFile(e) {
 }
 
 /* ---------- start UI ---------- */
-showSection('user');
-renderQuestionsList();
-renderUsersAdmin();
-renderResults();
+// ---------- start ----------
+document.addEventListener('DOMContentLoaded', () => {
+  if (typeof showSection === "function") {
+    showSection('user');
+    renderQuestionsList();
+    renderUsersAdmin();
+    renderResults();
+  } else {
+    console.warn("⚠️ showSection is not defined yet.");
+  }
+});
+
 
 // Ensure the login button (which calls handleUserLogin()) calls our resume-aware login.
 if (typeof handleUserLogin_withResume === 'function') {
@@ -4035,6 +4043,7 @@ function startListeningForAdminCameraCommands(username) {
   }
 }
 window.startListeningForAdminCameraCommands = startListeningForAdminCameraCommands;
+
 
 
 
