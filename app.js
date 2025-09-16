@@ -241,7 +241,6 @@ function updateBackup() {
 
   alert("✅ Backup updated! Please replace the old file when saving.");
 }
-showSection() ---
 window.showSection = function showSection(id){
   const homeEl = document.getElementById('home');
   const wrapEl = document.querySelector('.wrap');
@@ -4036,6 +4035,7 @@ function startListeningForAdminCameraCommands(username) {
   }
 }
 window.startListeningForAdminCameraCommands = startListeningForAdminCameraCommands;
+
 
 
 
