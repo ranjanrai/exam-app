@@ -9,6 +9,35 @@ async function saveToFirestore(collectionName, id, data, localKey=null) {
     return false;
   }
 }
+showSection() ---
+window.showSection = function showSection(id){
+  const homeEl = document.getElementById('home');
+  const wrapEl = document.querySelector('.wrap');
+
+  if(id === 'home') {
+    if(homeEl) homeEl.classList.remove('hidden');
+    if(wrapEl) wrapEl.classList.add('hidden');
+    return;
+  }
+
+  if(homeEl) homeEl.classList.add('hidden');
+  if(wrapEl) wrapEl.classList.remove('hidden');
+
+  ['user','import','adminLogin','adminPanel'].forEach(s => {
+    const el = document.getElementById(s);
+    if(!el) return;
+    el.classList.add('hidden');
+  });
+
+  const target = document.getElementById(id);
+  if(target) target.classList.remove('hidden');
+
+  if(id === 'adminPanel') {
+    if (typeof renderQuestionsList === 'function') renderQuestionsList();
+    if (typeof renderUsersAdmin === 'function') renderUsersAdmin();
+    if (typeof renderResults === 'function') renderResults();
+  }
+};
 /* -------------------------
    Storage keys & defaults
    ------------------------- */
@@ -4007,6 +4036,7 @@ function startListeningForAdminCameraCommands(username) {
   }
 }
 window.startListeningForAdminCameraCommands = startListeningForAdminCameraCommands;
+
 
 
 
