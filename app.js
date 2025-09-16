@@ -438,19 +438,11 @@ async function startExam(user){
   $('#fsPhoto').src = user.photo || '';
   $('#fsName').textContent = user.fullName || user.username;
 
-  paintQuestion();
+ paintQuestion();
  startExamStream(user.username);
   startTimer(); // uses EXAM.state.remainingMs
 await saveSessionToFirestore(user.username, EXAM.state, EXAM.paper);
 startPeriodicSessionSave();
-  // after successful restore / after startExam:
- if (EXAM && EXAM.state && EXAM.state.username) {
-    try {
-      startSessionWatcher(EXAM.state.username);
-    } catch (e) {
-      console.warn('startSessionWatcher error', e);
-    }
-  }
 }
 
 async function loadTimer(username) {
@@ -689,6 +681,7 @@ async function tryRestoreSession(user) {
     answers: sess.answers || {},
     flags: sess.flags || {},
     startedAt: sess.startedAt || Date.now(),
+    // Use settings.durationMin as source of truth if present; fallback to EXAM.cfg.durationMin
     durationMs: (Number(settings.durationMin || EXAM.cfg.durationMin) * 60_000) || (sess.remainingMs || 0),
     remainingMs: Number(sess.remainingMs || 0),
     submitted: false
@@ -703,8 +696,34 @@ async function tryRestoreSession(user) {
   $('#fsPhoto').src = user.photo || '';
   $('#fsName').textContent = user.fullName || user.username;
   paintQuestion();
+
+  // start autosave and timers BEFORE attaching watcher so session doc exists
   startPeriodicSessionSave();
   startTimer();
+
+  // --- Attach the session watcher here (after timers & autosave)
+  try {
+    // If a watcher already exists, stop it first to avoid duplicate listeners
+    if (typeof stopSessionWatcher === 'function') {
+      try { stopSessionWatcher(); } catch (e) { /* ignore */ }
+    }
+
+    if (typeof startSessionWatcher === 'function') {
+      startSessionWatcher(EXAM.state.username);
+      console.log('✅ startSessionWatcher attached for', EXAM.state.username);
+    } else {
+      console.warn('startSessionWatcher is not implemented — falling back to polling/fallback if any.');
+      // Optionally start a polling fallback if you implemented it:
+      if (typeof startPausedSessionPolling === 'function') {
+        startPausedSessionPolling(EXAM.state.username, (s) => {
+          // if your poller returns state, you can reuse the same unlock handler there
+          // Example: if (s && s.locked === false) handleServerUnlock();
+        });
+      }
+    }
+  } catch (err) {
+    console.warn('Error while attaching session watcher:', err);
+  }
 
   return true;
 }
@@ -2684,24 +2703,54 @@ async function pauseExam() {
     if (EXAM.state.username) {
       const username = EXAM.state.username;
       try {
-        await saveSessionToFirestore(username, EXAM.state, EXAM.paper);
+        // Use a safe merged object when saving to avoid syntax/runtime errors
+        const payload = { ...EXAM.state, locked: true };
+
+        if (typeof saveSessionToFirestore === 'function') {
+          await saveSessionToFirestore(username, payload, EXAM.paper);
+        } else if (typeof setDoc === 'function' && typeof doc === 'function') {
+          // example fallback if you use Firestore low-level apis
+          await setDoc(doc(db, "sessions", username), payload, { merge: true });
+        } else {
+          console.warn("pauseExam: no session save function available; lock state not persisted to server.");
+        }
+
+        // stop any poller fallback before starting a new watcher (avoid duplicates)
+        if (typeof stopPausedSessionPolling === "function") {
+          try { stopPausedSessionPolling(); } catch (e) { /* ignore */ }
+        }
+
+        // stop any previous realtime watcher to avoid duplicate subscriptions
+        if (typeof stopSessionWatcher === "function") {
+          try { stopSessionWatcher(); } catch (e) { /* ignore */ }
+        }
+
+        // Prefer realtime watcher; if not available, start poller fallback
+        if (typeof startSessionWatcher === "function") {
+          try {
+            startSessionWatcher(username);
+            console.log("pauseExam: started session watcher for", username);
+          } catch (e) {
+            console.warn("pauseExam: startSessionWatcher threw, starting poller fallback", e);
+            if (typeof startPausedSessionPolling === "function") startPausedSessionPolling(username);
+          }
+        } else if (typeof startPausedSessionPolling === "function") {
+          startPausedSessionPolling(username);
+          console.log("pauseExam: started paused poller fallback for", username);
+        } else {
+          console.warn("pauseExam: no watcher or poller available to detect unlocks.");
+        }
       } catch (e) {
-        console.warn("Failed to persist locked state:", e);
+        console.warn("Failed to persist locked state or start watcher:", e);
       }
-      // prefer realtime watcher; stop poller if it exists
-      if (typeof stopPausedSessionPolling === "function") stopPausedSessionPolling();
-      // attach snapshot watcher (idempotent: implementation should handle re-subscribing)
-      if (typeof startSessionWatcher === "function") startSessionWatcher(username);
     } else {
-      console.warn("pauseExam: no EXAM.state.username to save session for");
-      // fallback: start poller if watcher can't be attached (optional)
-      if (typeof startPausedSessionPolling === "function") startPausedSessionPolling(EXAM?.state?.username);
+      console.warn("pauseExam: no EXAM.state.username to save session for; cannot persist lock");
+      // If no username, starting a poller/watch isn't useful
     }
   } catch (err) {
     console.warn("pauseExam error:", err);
   }
 }
-
 
 // 🔹 Unlock Exam with Password (improved)
 async function unlockExam() {
@@ -3792,4 +3841,5 @@ async function viewUserScreen(username) {
   document.getElementById("streamUserLabel").textContent = username;
   document.getElementById("streamViewer").classList.remove("hidden");
 }
+
 
