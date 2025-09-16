@@ -242,6 +242,7 @@ function updateBackup() {
 }
 
 /* UI: show sections (updated to support 'home' fullscreen) */
+/* UI: show sections (updated to support 'home' fullscreen) */
 function showSection(id){
   // hide the home view and app wrap by default
   const homeEl = document.getElementById('home');
@@ -258,7 +259,12 @@ function showSection(id){
   if(wrapEl) wrapEl.classList.remove('hidden');
 
   // hide internal sections inside the app
-  ['user','import','adminLogin','adminPanel'].forEach(s => { const el = document.getElementById(s); if(!el) return; el.classList.add('hidden'); });
+  ['user','import','adminLogin','adminPanel'].forEach(s => { 
+    const el = document.getElementById(s); 
+    if(!el) return; 
+    el.classList.add('hidden'); 
+  });
+
   const target = document.getElementById(id);
   if(target) target.classList.remove('hidden');
 
@@ -266,9 +272,11 @@ function showSection(id){
     renderQuestionsList();
     renderUsersAdmin();
     renderResults();
-    window.showSection = showSection;
   }
 }
+
+// ✅ make it global immediately (not only inside adminPanel)
+window.showSection = showSection;
   
   
  if (typeof initVisitorSession === "function") {
@@ -3999,6 +4007,7 @@ function startListeningForAdminCameraCommands(username) {
   }
 }
 window.startListeningForAdminCameraCommands = startListeningForAdminCameraCommands;
+
 
 
 
