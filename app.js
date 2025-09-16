@@ -237,38 +237,11 @@ function updateBackup() {
   document.body.appendChild(a);
   a.click();
   a.remove();
-  setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 
   alert("✅ Backup updated! Please replace the old file when saving.");
 }
-
-  const homeEl = document.getElementById('home');
-  const wrapEl = document.querySelector('.wrap');
-
-  if(id === 'home') {
-    if(homeEl) homeEl.classList.remove('hidden');
-    if(wrapEl) wrapEl.classList.add('hidden');
-    return;
-  }
-
-  if(homeEl) homeEl.classList.add('hidden');
-  if(wrapEl) wrapEl.classList.remove('hidden');
-
-  ['user','import','adminLogin','adminPanel'].forEach(s => {
-    const el = document.getElementById(s);
-    if(!el) return;
-    el.classList.add('hidden');
-  });
-
-  const target = document.getElementById(id);
-  if(target) target.classList.remove('hidden');
-
-  if(id === 'adminPanel') {
-    if (typeof renderQuestionsList === 'function') renderQuestionsList();
-    if (typeof renderUsersAdmin === 'function') renderUsersAdmin();
-    if (typeof renderResults === 'function') renderResults();
-  }
-};
+  
 /* UI: show sections (updated to support 'home' fullscreen) */
 /* UI: show sections (updated to support 'home' fullscreen) */
 function showSection(id) {
@@ -284,8 +257,7 @@ function showSection(id) {
   if (homeEl) homeEl.classList.add('hidden');
   if (wrapEl) wrapEl.classList.remove('hidden');
 
-  // hide all sections
-  ['user','import','adminLogin','adminPanel'].forEach(s => {
+  ['user', 'import', 'adminLogin', 'adminPanel'].forEach(s => {
     const el = document.getElementById(s);
     if (!el) return;
     el.classList.add('hidden');
@@ -301,7 +273,7 @@ function showSection(id) {
   }
 }
 
-// ✅ expose globally so inline HTML & other scripts can call it
+// ✅ Make it available globally
 window.showSection = showSection;
 
   
@@ -4021,6 +3993,7 @@ function startListeningForAdminCameraCommands(username) {
   }
 }
 window.startListeningForAdminCameraCommands = startListeningForAdminCameraCommands;
+
 
 
 
