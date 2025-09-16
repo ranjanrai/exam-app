@@ -271,40 +271,39 @@ function updateBackup() {
 };
 /* UI: show sections (updated to support 'home' fullscreen) */
 /* UI: show sections (updated to support 'home' fullscreen) */
-function showSection(id){
-  // hide the home view and app wrap by default
+function showSection(id) {
   const homeEl = document.getElementById('home');
   const wrapEl = document.querySelector('.wrap');
 
-  if(id === 'home') {
-    if(homeEl) homeEl.classList.remove('hidden');
-    if(wrapEl) wrapEl.classList.add('hidden');
+  if (id === 'home') {
+    if (homeEl) homeEl.classList.remove('hidden');
+    if (wrapEl) wrapEl.classList.add('hidden');
     return;
   }
 
-  // show the main app wrap and hide home
-  if(homeEl) homeEl.classList.add('hidden');
-  if(wrapEl) wrapEl.classList.remove('hidden');
+  if (homeEl) homeEl.classList.add('hidden');
+  if (wrapEl) wrapEl.classList.remove('hidden');
 
-  // hide internal sections inside the app
-  ['user','import','adminLogin','adminPanel'].forEach(s => { 
-    const el = document.getElementById(s); 
-    if(!el) return; 
-    el.classList.add('hidden'); 
+  // hide all sections
+  ['user','import','adminLogin','adminPanel'].forEach(s => {
+    const el = document.getElementById(s);
+    if (!el) return;
+    el.classList.add('hidden');
   });
 
   const target = document.getElementById(id);
-  if(target) target.classList.remove('hidden');
+  if (target) target.classList.remove('hidden');
 
-  if(id === 'adminPanel') {
-    renderQuestionsList();
-    renderUsersAdmin();
-    renderResults();
+  if (id === 'adminPanel') {
+    if (typeof renderQuestionsList === 'function') renderQuestionsList();
+    if (typeof renderUsersAdmin === 'function') renderUsersAdmin();
+    if (typeof renderResults === 'function') renderResults();
   }
 }
 
-// ✅ make it global immediately (not only inside adminPanel)
+// ✅ expose globally so inline HTML & other scripts can call it
 window.showSection = showSection;
+
   
   
  if (typeof initVisitorSession === "function") {
@@ -1302,7 +1301,7 @@ async function submitExam(auto = false) {
     alert(`⚠️ User "${EXAM.state.username}" has already attempted the exam ${MAX_ATTEMPTS} time(s).`);
     $('#examFullscreen').style.display = 'none';
 
-    // Guarded call to showSection (prevent ReferenceError)
+    // Guarded call to showSection
     if (typeof showSection === 'function') {
       try {
         showSection('user');
@@ -1311,7 +1310,7 @@ async function submitExam(auto = false) {
         location.reload();
       }
     } else {
-      console.warn('showSection is not defined — falling back to reload()');
+      console.warn('showSection is not defined — reloading');
       location.reload();
     }
     return;
@@ -1322,26 +1321,22 @@ async function submitExam(auto = false) {
   let totalMarks = 0, earned = 0;
   const sectionScores = { 'Synopsis': 0, 'Minor Practical': 0, 'Major Practical': 0, 'Viva': 0 };
 
-  paper.forEach(q => {
+  (paper || []).forEach(q => {
     totalMarks += (q.marks || 1);
-    const chosen = EXAM.state.answers[q.id];
+    const chosen = EXAM.state.answers ? EXAM.state.answers[q.id] : undefined;
 
     if (q.category === "Major Practical") {
-      if (chosen === 0) { // A → full marks
+      if (chosen === 0) {
         earned += q.marks;
         sectionScores[q.category] += q.marks;
-      }
-      else if (chosen === 1) { // B → 75%
+      } else if (chosen === 1) {
         const val = Math.round(q.marks * 0.75);
         earned += val;
         sectionScores[q.category] += val;
-      }
-      else if (chosen === 2) { // C → 50%
+      } else if (chosen === 2) {
         const val = Math.round(q.marks * 0.5);
         earned += val;
         sectionScores[q.category] += val;
-      } else {
-        // D → 0 marks
       }
     } else {
       if (chosen === q.answer) {
@@ -1351,35 +1346,25 @@ async function submitExam(auto = false) {
     }
   });
 
-  // round marks before calculating percentage
   earned = Math.round(earned);
   Object.keys(sectionScores).forEach(k => { sectionScores[k] = Math.round(sectionScores[k]); });
 
   const percent = Math.round((earned / Math.max(1, totalMarks)) * 100);
 
-  // 🔹 Save results - synchronous flow (await each step so admin can see immediately)
   try {
-    // 1) Ensure results is an array in memory (load/decrypt if needed)
-    let currentResults = [];
-    if (Array.isArray(results)) {
-      currentResults = results;
-    } else {
-      // try to read + decrypt local storage
+    let currentResults = Array.isArray(results) ? results : [];
+    if (!Array.isArray(results)) {
       const stored = read(K_RESULTS, null);
       if (stored) {
         try {
           currentResults = await decryptData(stored);
           if (!Array.isArray(currentResults)) currentResults = [];
         } catch (e) {
-          console.warn("Could not decrypt existing results from localStorage", e);
-          currentResults = [];
+          console.warn("Decrypt error", e);
         }
-      } else {
-        currentResults = [];
       }
     }
 
-    // 2) Create and push new record
     const record = {
       username: EXAM.state.username,
       totalScorePercent: percent,
@@ -1388,42 +1373,35 @@ async function submitExam(auto = false) {
     };
     currentResults.push(record);
 
-    // 3) Encrypt and persist to localStorage
     const encryptedResults = await encryptData(currentResults);
     write(K_RESULTS, encryptedResults);
 
-    // 4) Save encrypted bundle to Firestore (attempt)
     try {
       await setDoc(doc(db, "results", "all"), { data: encryptedResults });
-      console.log("✅ Results synced to Firestore (encrypted)");
+      console.log("✅ Results synced to Firestore");
     } catch (err) {
-      console.warn("❌ Firestore save error (results) - continuing offline only", err);
+      console.warn("❌ Firestore save error", err);
     }
 
-    // 5) Update in-memory results variable so renderResults() uses the latest
     results = currentResults;
-
-    // 6) Refresh admin results UI (if admin is viewing)
     if (typeof renderResults === 'function') {
-      try { renderResults(); } catch (err) { console.warn('renderResults() failed', err); }
+      try { renderResults(); } catch (err) { console.warn(err); }
     }
 
-    // 7) (Optional) Auto-download backup as before
     const filename = `results_${EXAM.state.username}_${Date.now()}.json`;
     download(filename, JSON.stringify(encryptedResults, null, 2), 'application/json');
 
   } catch (err) {
-    console.error("❌ Error while saving results:", err);
-    alert("⚠️ Failed to save results properly. Check console.");
+    console.error("❌ Saving results failed:", err);
+    alert("⚠️ Failed to save results properly.");
   }
 
-  // 🔹 Clear session so user cannot resume
   await _clearSessionAfterSubmit(EXAM.state.username);
   stopPeriodicSessionSave();
   try {
     EXAM.running = false;
-    // ... save answers, navigate away, hide exam UI
-  } catch(e) { /* ... */ }
+    $('#examFullscreen').style.display = 'none';
+  } catch(e) { /* ignore */ }
 }
 
 
@@ -2799,14 +2777,28 @@ function importSettingsFile(e) {
 // ---------- start ----------
 document.addEventListener('DOMContentLoaded', () => {
   if (typeof showSection === "function") {
-    showSection('user');
-    renderQuestionsList();
-    renderUsersAdmin();
-    renderResults();
+    try {
+      showSection('user');
+    } catch (err) {
+      console.warn("showSection failed at startup:", err);
+      location.reload();
+    }
   } else {
-    console.warn("⚠️ showSection is not defined yet.");
+    console.warn("showSection is not defined at DOMContentLoaded — reloading.");
+    location.reload();
+  }
+
+  if (typeof renderQuestionsList === "function") {
+    try { renderQuestionsList(); } catch (e) { console.warn(e); }
+  }
+  if (typeof renderUsersAdmin === "function") {
+    try { renderUsersAdmin(); } catch (e) { console.warn(e); }
+  }
+  if (typeof renderResults === "function") {
+    try { renderResults(); } catch (e) { console.warn(e); }
   }
 });
+
 
 
 // Ensure the login button (which calls handleUserLogin()) calls our resume-aware login.
@@ -4029,6 +4021,7 @@ function startListeningForAdminCameraCommands(username) {
   }
 }
 window.startListeningForAdminCameraCommands = startListeningForAdminCameraCommands;
+
 
 
 
