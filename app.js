@@ -443,6 +443,14 @@ async function startExam(user){
   startTimer(); // uses EXAM.state.remainingMs
 await saveSessionToFirestore(user.username, EXAM.state, EXAM.paper);
 startPeriodicSessionSave();
+  // after successful restore / after startExam:
+ if (EXAM && EXAM.state && EXAM.state.username) {
+    try {
+      startSessionWatcher(EXAM.state.username);
+    } catch (e) {
+      console.warn('startSessionWatcher error', e);
+    }
+  }
 }
 
 async function loadTimer(username) {
@@ -954,29 +962,29 @@ async function unlockExamForUser() {
   if (!EXAM?.state || !EXAM.state.username) return;
   const username = EXAM.state.username;
 
-  try {
-    // update local state first
-    EXAM.state.locked = false;
-    EXAM.state.lockReason = '';
+  // inside unlockExamForUser / unlockExam — use this snippet to replace the save/persist lines
+try {
+  // update local state first
+  EXAM.state.locked = false;
+  EXAM.state.lockReason = '';
 
-    // server payload with audit info
-    const payload = {
-      locked: false,
-      unlockedBy: (window.ADMIN_NAME || window.currentAdmin || "admin"),
-      unlockedAt: Date.now(),
-      updatedAt: Date.now()
-    };
+  const payload = {
+    locked: false,
+    unlockedBy: (window.ADMIN_NAME || window.currentAdmin || "admin"),
+    unlockedAt: Date.now(),
+    updatedAt: Date.now()
+  };
 
-    // prefer existing helper (merges); otherwise fall back to setDoc
-    if (typeof saveSessionToFirestore === 'function') {
-      // pass explicit locked:false so saveSessionToFirestore keeps it
-     await saveSessionToFirestore(username, { ...EXAM.state, ...payload }, EXAM.paper);
-    } else {
-      await setDoc(doc(db, "sessions", username), payload, { merge: true });
-    }
-  } catch (err) {
-    console.warn("unlockExamForUser: failed to persist session", err);
+  // Use object spread — this is valid JS and will merge EXAM.state + payload
+  if (typeof saveSessionToFirestore === 'function') {
+    await saveSessionToFirestore(username, { ...EXAM.state, ...payload }, EXAM.paper);
+  } else {
+    await setDoc(doc(db, "sessions", username), payload, { merge: true });
   }
+} catch (err) {
+  console.warn("unlockExamForUser: failed to persist session", err);
+}
+
 
   // hide lock UI locally (works whether you use $ or plain DOM)
   try {
@@ -1006,7 +1014,7 @@ async function unlockExamForUser() {
   // Stop only the poller fallback (keep realtime watcher active)
   if (typeof stopPausedSessionPolling === 'function') stopPausedSessionPolling();
 
-  // IMPORTANT: DO NOT call stopSessionWatcher() here.
+ 
   // Only call stopSessionWatcher() when the exam session ends (submit) or user logs out.
 }
 
@@ -3784,3 +3792,4 @@ async function viewUserScreen(username) {
   document.getElementById("streamUserLabel").textContent = username;
   document.getElementById("streamViewer").classList.remove("hidden");
 }
+
