@@ -283,6 +283,92 @@ document.addEventListener('DOMContentLoaded', ()=> {
       alert('Login handler not found – ensure handleUserLogin exists.');
     }
   });
+// CAMERA permission preview helpers (put inside DOMContentLoaded)
+let _homeCameraStream = null;
+
+async function startHomeCamera() {
+  try {
+    if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
+      alert('Camera API not available in this browser.');
+      return;
+    }
+
+    // Ask for camera (video) permission
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    _homeCameraStream = stream;
+
+    const video = document.getElementById('homeCameraPreview');
+    const container = document.getElementById('cameraPreviewContainer');
+    const stopBtn = document.getElementById('stopCameraBtn');
+    if (video) {
+      // show preview
+      video.srcObject = stream;
+      container.style.display = 'block';
+      stopBtn.classList.remove('hidden');
+      document.getElementById('enableCameraBtn').classList.add('hidden');
+    }
+
+    // Optional: remember user choice for this browser session (not required)
+    try { localStorage.setItem('cameraGranted', '1'); } catch(e){}
+
+  } catch (err) {
+    console.warn('Camera permission denied or error:', err);
+    if (err && err.name === 'NotAllowedError') {
+      alert('Camera permission denied. You can enable it from browser settings.');
+    } else {
+      alert('Could not access camera: ' + (err && err.message ? err.message : err));
+    }
+  }
+}
+
+function stopHomeCamera() {
+  try {
+    // stop all tracks
+    if (_homeCameraStream) {
+      _homeCameraStream.getTracks().forEach(t => {
+        try { t.stop(); } catch (e) {}
+      });
+      _homeCameraStream = null;
+    }
+    // hide preview & toggle buttons
+    const video = document.getElementById('homeCameraPreview');
+    if (video) {
+      try { video.srcObject = null; } catch(e){}
+    }
+    const container = document.getElementById('cameraPreviewContainer');
+    const stopBtn = document.getElementById('stopCameraBtn');
+    if (container) container.style.display = 'none';
+    if (stopBtn) stopBtn.classList.add('hidden');
+    const enableBtn = document.getElementById('enableCameraBtn');
+    if (enableBtn) enableBtn.classList.remove('hidden');
+
+    try { localStorage.removeItem('cameraGranted'); } catch(e){}
+  } catch (e) {
+    console.warn('stopHomeCamera error', e);
+  }
+}
+
+// Wiring: Add listeners to the buttons (inside DOMContentLoaded)
+const enableBtn = document.getElementById('enableCameraBtn');
+if (enableBtn) {
+  enableBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    startHomeCamera();
+  });
+}
+const stopBtn = document.getElementById('stopCameraBtn');
+if (stopBtn) stopBtn.addEventListener('click', (e) => { e.preventDefault(); stopHomeCamera(); });
+
+// Optional: stop camera when user navigates to the user section (so preview doesn't keep running)
+const originalShowSection = showSection;
+window.showSection = function(id) {
+  // stop camera if leaving home
+  if (id !== 'home') {
+    stopHomeCamera();
+  }
+  // call existing showSection (preserve behavior)
+  return originalShowSection(id);
+};
 
   // Enter key on home password should trigger login
   document.getElementById('homePassword').addEventListener('keydown', (e)=>{ if(e.key === 'Enter') document.getElementById('homeLoginBtn').click(); });
@@ -3841,5 +3927,6 @@ async function viewUserScreen(username) {
   document.getElementById("streamUserLabel").textContent = username;
   document.getElementById("streamViewer").classList.remove("hidden");
 }
+
 
 
