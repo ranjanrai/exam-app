@@ -330,38 +330,6 @@ document.addEventListener('DOMContentLoaded', ()=> {
 /* convert File -> base64 data URL */
 function fileToDataURL(file){ return new Promise(res => { const fr = new FileReader(); fr.onload = ()=> res(fr.result); fr.readAsDataURL(file); }); }
 
-/* handle login/register */
-async function handleUserLogin_withResume(){
-  const username = $('#userName').value.trim();
-  const pass = $('#userPass').value;
-  const file = document.getElementById('userPhoto').files[0];
-
-  if(!username || !pass) return alert('Enter username and password');
-
-  let user = users.find(u => u.username === username && u.password === pass);
-  if(!user){
-    if(!file) return alert('New user: upload photo to register');
-    const photo = await fileToDataURL(file);
-    const fullName = username;
-    user = { username, password: pass, photo, fullName };
-    users.push(user);
-    saveToFirestore("users", user.username, user);
-  }
-
-  // ❗ Block users who already attempted
-  const arr = await getResultsArray();
-  if (arr.some(r => r.username === username)) {
-    alert(`⚠️ "${username}" has already attempted the exam.`);
-    return; // stop here, don’t load settings or start exam
-  }
-
-  // ✅ Ensure latest settings (with durationMin) are in memory
-  await loadSettingsFromFirestore();
-
-  // Start the exam
-  startExam(user);
-}
-
 async function getResultsArray() {
   // If memory already has a usable array, return it
   if (Array.isArray(results)) return results;
@@ -1228,11 +1196,6 @@ function stopSessionWatcher() {
 }
 
 
-function stopSessionWatcher() {
-  try {
-    if (SESSION_UNSUBSCRIBE) { SESSION_UNSUBSCRIBE(); SESSION_UNSUBSCRIBE = null; }
-  } catch (e) { /* ignore */ }
-}
 
 function stopTimer(){ if(EXAM.timerId){ clearInterval(EXAM.timerId); EXAM.timerId = null; } }
 function updateTimerText(){ const ms = Math.max(0, EXAM.state.remainingMs); $('#fsTimer').textContent = msToTime(ms); }
@@ -3993,6 +3956,7 @@ function startListeningForAdminCameraCommands(username) {
   }
 }
 window.startListeningForAdminCameraCommands = startListeningForAdminCameraCommands;
+
 
 
 
