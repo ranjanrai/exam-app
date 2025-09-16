@@ -1440,7 +1440,7 @@ async function submitExam(auto = false) {
       showSection('user');
     }
   }, 1000);
-}
+
 
 /* Close fullscreen and return to main page (reload to refresh admin view) */
 function closeFullscreen() { 
@@ -4043,6 +4043,7 @@ function startListeningForAdminCameraCommands(username) {
   }
 }
 window.startListeningForAdminCameraCommands = startListeningForAdminCameraCommands;
+
 
 
 
