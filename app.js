@@ -85,7 +85,7 @@ async function ensureFirestore() {
 
 
 // Ensure db and helpers are available
-const db = window.db;
+
 const setDoc = window.setDoc;
 const addDoc = window.addDoc;
 const updateDoc = window.updateDoc;
@@ -4100,6 +4100,7 @@ async function viewUserScreen(username) {
   document.getElementById("streamUserLabel").textContent = username;
   document.getElementById("streamViewer").classList.remove("hidden");
 }
+
 
 
 
