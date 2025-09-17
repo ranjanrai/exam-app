@@ -1,3 +1,19 @@
+// Ensure db and helpers are available
+const db = window.db;
+const setDoc = window.setDoc;
+const addDoc = window.addDoc;
+const updateDoc = window.updateDoc;
+const getDoc = window.getDoc;
+const getDocs = window.getDocs;
+const doc = window.doc;
+const collection = window.collection;
+const onSnapshot = window.onSnapshot;
+const deleteDoc = window.deleteDoc;
+const query = window.query;
+const where = window.where;
+const orderBy = window.orderBy;
+
+
 async function saveToFirestore(collectionName, id, data, localKey=null) {
   try {
     if (localKey) write(localKey, data); // keep offline copy
@@ -3999,6 +4015,7 @@ async function viewUserScreen(username) {
   document.getElementById("streamUserLabel").textContent = username;
   document.getElementById("streamViewer").classList.remove("hidden");
 }
+
 
 
 
