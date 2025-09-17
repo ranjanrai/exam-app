@@ -1,12 +1,8 @@
-// ---------- Firestore readiness guard (paste at top of app.js) ----------
-/**
- * Wait for the firebase module initializer to expose window.db and helper functions.
- * Resolves when ready, rejects after timeoutMs.
- */
+// ---------- Firestore readiness guard ----------
 function waitForFirestoreReady(timeoutMs = 5000) {
   return new Promise((resolve, reject) => {
     if (window.db && typeof window.getDoc === 'function' && typeof window.doc === 'function') {
-      return resolve(); // already ready
+      return resolve();
     }
     const start = Date.now();
     const iv = setInterval(() => {
@@ -22,65 +18,66 @@ function waitForFirestoreReady(timeoutMs = 5000) {
   });
 }
 
-// Provide local aliases so the rest of app.js can call doc(), getDoc(), etc.
-// These will be set after waitForFirestoreReady resolves.
+// Firestore aliases (only declare ONCE)
 let db = window.db || null;
-let docFn = window.doc || null;
-let getDocFn = window.getDoc || null;
-let getDocsFn = window.getDocs || null;
-let collectionFn = window.collection || null;
-let setDocFn = window.setDoc || null;
-let addDocFn = window.addDoc || null;
-let updateDocFn = window.updateDoc || null;
-let onSnapshotFn = window.onSnapshot || null;
-let deleteDocFn = window.deleteDoc || null;
-let queryFn = window.query || null;
-let whereFn = window.where || null;
-let orderByFn = window.orderBy || null;
+let setDoc = window.setDoc || null;
+let addDoc = window.addDoc || null;
+let updateDoc = window.updateDoc || null;
+let getDoc = window.getDoc || null;
+let getDocs = window.getDocs || null;
+let doc = window.doc || null;
+let collection = window.collection || null;
+let onSnapshot = window.onSnapshot || null;
+let deleteDoc = window.deleteDoc || null;
+let query = window.query || null;
+let where = window.where || null;
+let orderBy = window.orderBy || null;
 
-// Try to populate aliases synchronously if already present
+// Sync immediately if window.* already populated
 if (window.db) {
   db = window.db;
-  docFn = window.doc || docFn;
-  getDocFn = window.getDoc || getDocFn;
-  getDocsFn = window.getDocs || getDocsFn;
-  collectionFn = window.collection || collectionFn;
-  setDocFn = window.setDoc || setDocFn;
-  addDocFn = window.addDoc || addDocFn;
-  updateDocFn = window.updateDoc || updateDocFn;
-  onSnapshotFn = window.onSnapshot || onSnapshotFn;
-  deleteDocFn = window.deleteDoc || deleteDocFn;
-  queryFn = window.query || queryFn;
-  whereFn = window.where || whereFn;
-  orderByFn = window.orderBy || orderByFn;
+  setDoc = window.setDoc;
+  addDoc = window.addDoc;
+  updateDoc = window.updateDoc;
+  getDoc = window.getDoc;
+  getDocs = window.getDocs;
+  doc = window.doc;
+  collection = window.collection;
+  onSnapshot = window.onSnapshot;
+  deleteDoc = window.deleteDoc;
+  query = window.query;
+  where = window.where;
+  orderBy = window.orderBy;
 }
 
-// Expose a helper consumer function the rest of your file can await before using Firestore
+// Expose an async guard for later use
 async function ensureFirestore() {
   try {
-    await waitForFirestoreReady(5000); // 5s timeout
-    // refresh aliases from window (in case they were set after the initial check)
+    await waitForFirestoreReady(5000); // wait up to 5s
+    // Refresh aliases
     db = window.db;
-    docFn = window.doc;
-    getDocFn = window.getDoc;
-    getDocsFn = window.getDocs;
-    collectionFn = window.collection;
-    setDocFn = window.setDoc;
-    addDocFn = window.addDoc;
-    updateDocFn = window.updateDoc;
-    onSnapshotFn = window.onSnapshot;
-    deleteDocFn = window.deleteDoc;
-    queryFn = window.query;
-    whereFn = window.where;
-    orderByFn = window.orderBy;
-    console.info('Firestore ready: db and helpers available.');
+    setDoc = window.setDoc;
+    addDoc = window.addDoc;
+    updateDoc = window.updateDoc;
+    getDoc = window.getDoc;
+    getDocs = window.getDocs;
+    doc = window.doc;
+    collection = window.collection;
+    onSnapshot = window.onSnapshot;
+    deleteDoc = window.deleteDoc;
+    query = window.query;
+    where = window.where;
+    orderBy = window.orderBy;
+    console.info("Firestore ready: db and helpers available.");
     return true;
   } catch (err) {
-    console.warn('Firestore not available within timeout — falling back to local storage', err);
+    console.warn("Firestore not available within timeout — falling back to local storage", err);
     return false;
   }
 }
 // ---------- End guard ----------
+
+
 
 
 
@@ -4100,6 +4097,7 @@ async function viewUserScreen(username) {
   document.getElementById("streamUserLabel").textContent = username;
   document.getElementById("streamViewer").classList.remove("hidden");
 }
+
 
 
 
