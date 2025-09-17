@@ -1677,12 +1677,19 @@ async function renderResults() {
   }
 
   // 1) Try Firestore first (if initialized)
-  try {
-    // ensure db, getDoc and doc are available (imported)
-    if (typeof db === 'undefined' || typeof getDoc !== 'function' || typeof doc !== 'function') {
-      console.warn('Firestore not available or getDoc/doc not imported — falling back to local storage');
-      throw new Error('firestore-not-ready');
-    }
+  // 1) Try Firestore first (wait until initialized)
+let firestoreAvailable = false;
+try {
+  firestoreAvailable = await ensureFirestore(); // waits up to 5s for window.db + helpers
+  if (!firestoreAvailable) {
+    console.warn('Firestore not ready — falling back to local storage');
+    throw new Error('firestore-not-ready');
+  }
+
+  const docRef = doc(db, "questions", "all");  // now safe
+  const snap = await getDoc(docRef);
+  ...
+
 
     const docRef = doc(db, "results", "all");
     const snap = await getDoc(docRef);
@@ -3927,6 +3934,7 @@ async function viewUserScreen(username) {
   document.getElementById("streamUserLabel").textContent = username;
   document.getElementById("streamViewer").classList.remove("hidden");
 }
+
 
 
 
