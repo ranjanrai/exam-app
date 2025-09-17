@@ -1,85 +1,3 @@
-// ---------- Firestore readiness guard ----------
-function waitForFirestoreReady(timeoutMs = 5000) {
-  return new Promise((resolve, reject) => {
-    if (window.db && typeof window.getDoc === 'function' && typeof window.doc === 'function') {
-      return resolve();
-    }
-    const start = Date.now();
-    const iv = setInterval(() => {
-      if (window.db && typeof window.getDoc === 'function' && typeof window.doc === 'function') {
-        clearInterval(iv);
-        return resolve();
-      }
-      if (Date.now() - start > timeoutMs) {
-        clearInterval(iv);
-        return reject(new Error('firestore-init-timeout'));
-      }
-    }, 100);
-  });
-}
-
-// Firestore aliases (only declare ONCE)
-let db = window.db || null;
-let setDoc = window.setDoc || null;
-let addDoc = window.addDoc || null;
-let updateDoc = window.updateDoc || null;
-let getDoc = window.getDoc || null;
-let getDocs = window.getDocs || null;
-let doc = window.doc || null;
-let collection = window.collection || null;
-let onSnapshot = window.onSnapshot || null;
-let deleteDoc = window.deleteDoc || null;
-let query = window.query || null;
-let where = window.where || null;
-let orderBy = window.orderBy || null;
-
-// Sync immediately if window.* already populated
-if (window.db) {
-  db = window.db;
-  setDoc = window.setDoc;
-  addDoc = window.addDoc;
-  updateDoc = window.updateDoc;
-  getDoc = window.getDoc;
-  getDocs = window.getDocs;
-  doc = window.doc;
-  collection = window.collection;
-  onSnapshot = window.onSnapshot;
-  deleteDoc = window.deleteDoc;
-  query = window.query;
-  where = window.where;
-  orderBy = window.orderBy;
-}
-
-// Expose an async guard for later use
-async function ensureFirestore() {
-  try {
-    await waitForFirestoreReady(5000); // wait up to 5s
-    // Refresh aliases
-    db = window.db;
-    setDoc = window.setDoc;
-    addDoc = window.addDoc;
-    updateDoc = window.updateDoc;
-    getDoc = window.getDoc;
-    getDocs = window.getDocs;
-    doc = window.doc;
-    collection = window.collection;
-    onSnapshot = window.onSnapshot;
-    deleteDoc = window.deleteDoc;
-    query = window.query;
-    where = window.where;
-    orderBy = window.orderBy;
-    console.info("Firestore ready: db and helpers available.");
-    return true;
-  } catch (err) {
-    console.warn("Firestore not available within timeout — falling back to local storage", err);
-    return false;
-  }
-}
-// ---------- End guard ----------
-
-
-
-
 async function saveToFirestore(collectionName, id, data, localKey=null) {
   try {
     if (localKey) write(localKey, data); // keep offline copy
@@ -365,164 +283,6 @@ document.addEventListener('DOMContentLoaded', ()=> {
       alert('Login handler not found – ensure handleUserLogin exists.');
     }
   });
-// CAMERA permission preview helpers (put inside DOMContentLoaded)
-let _homeCameraStream = null;
-
-async function startHomeCamera() {
-  try {
-    if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
-      alert('Camera API not available in this browser.');
-      return;
-    }
-
-    // Ask for camera (video) permission
-    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-    _homeCameraStream = stream;
-
-    const video = document.getElementById('homeCameraPreview');
-    const container = document.getElementById('cameraPreviewContainer');
-    const stopBtn = document.getElementById('stopCameraBtn');
-    if (video) {
-      // show preview
-      video.srcObject = stream;
-      container.style.display = 'block';
-      stopBtn.classList.remove('hidden');
-      document.getElementById('enableCameraBtn').classList.add('hidden');
-    }
-
-    // Optional: remember user choice for this browser session (not required)
-    try { localStorage.setItem('cameraGranted', '1'); } catch(e){}
-
-  } catch (err) {
-    console.warn('Camera permission denied or error:', err);
-    if (err && err.name === 'NotAllowedError') {
-      alert('Camera permission denied. You can enable it from browser settings.');
-    } else {
-      alert('Could not access camera: ' + (err && err.message ? err.message : err));
-    }
-  }
-}
-
-function stopHomeCamera() {
-  try {
-    // stop all tracks
-    if (_homeCameraStream) {
-      _homeCameraStream.getTracks().forEach(t => {
-        try { t.stop(); } catch (e) {}
-      });
-      _homeCameraStream = null;
-    }
-    // hide preview & toggle buttons
-    const video = document.getElementById('homeCameraPreview');
-    if (video) {
-      try { video.srcObject = null; } catch(e){}
-    }
-    const container = document.getElementById('cameraPreviewContainer');
-    const stopBtn = document.getElementById('stopCameraBtn');
-    if (container) container.style.display = 'none';
-    if (stopBtn) stopBtn.classList.add('hidden');
-    const enableBtn = document.getElementById('enableCameraBtn');
-    if (enableBtn) enableBtn.classList.remove('hidden');
-
-    try { localStorage.removeItem('cameraGranted'); } catch(e){}
-  } catch (e) {
-    console.warn('stopHomeCamera error', e);
-  }
-}
-
-// Wiring: Add listeners to the buttons (inside DOMContentLoaded)
-const enableBtn = document.getElementById('enableCameraBtn');
-if (enableBtn) {
-  enableBtn.addEventListener('click', (e) => {
-    e.preventDefault();
-    startHomeCamera();
-  });
-}
-const stopBtn = document.getElementById('stopCameraBtn');
-if (stopBtn) stopBtn.addEventListener('click', (e) => { e.preventDefault(); stopHomeCamera(); });
-
-  // --- Home screen-share preview helpers ---
-let _homeScreenStream = null;
-
-async function startHomeScreenShare() {
-  try {
-    if (!navigator.mediaDevices || typeof navigator.mediaDevices.getDisplayMedia !== 'function') {
-      alert('Screen Capture API not available in this browser.');
-      return;
-    }
-
-    // Request screen sharing permission
-    const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
-    _homeScreenStream = stream;
-
-    const video = document.getElementById('homeScreenPreview');
-    const container = document.getElementById('screenPreviewContainer');
-    const stopBtn = document.getElementById('stopScreenBtn');
-    const startBtn = document.getElementById('enableScreenBtn');
-
-    if (video) {
-      video.srcObject = stream;
-      container.style.display = 'block';
-      stopBtn.classList.remove('hidden');
-      if (startBtn) startBtn.classList.add('hidden');
-      try { await video.play(); } catch(e){}
-    }
-
-    // Cleanup when user stops sharing from browser UI
-    stream.getVideoTracks().forEach(track => {
-      track.onended = () => stopHomeScreenShare();
-    });
-
-  } catch (err) {
-    console.warn('Screen share permission denied or error:', err);
-    if (err && err.name === 'NotAllowedError') {
-      alert('Screen share permission denied. Enable it from the browser or try again.');
-    } else {
-      alert('Could not start screen share: ' + (err && err.message ? err.message : err));
-    }
-  }
-}
-
-function stopHomeScreenShare() {
-  try {
-    if (_homeScreenStream) {
-      _homeScreenStream.getTracks().forEach(t => { try { t.stop(); } catch (e) {} });
-      _homeScreenStream = null;
-    }
-    const video = document.getElementById('homeScreenPreview');
-    if (video) { try { video.srcObject = null; } catch(e){} }
-    const container = document.getElementById('screenPreviewContainer');
-    const stopBtn = document.getElementById('stopScreenBtn');
-    const startBtn = document.getElementById('enableScreenBtn');
-    if (container) container.style.display = 'none';
-    if (stopBtn) stopBtn.classList.add('hidden');
-    if (startBtn) startBtn.classList.remove('hidden');
-  } catch (e) {
-    console.warn('stopHomeScreenShare error', e);
-  }
-}
-
-// Wiring: Add listeners for screen-share preview buttons (inside DOMContentLoaded)
-const enableScreenBtn = document.getElementById('enableScreenBtn');
-if (enableScreenBtn) {
-  enableScreenBtn.addEventListener('click', (e) => {
-    e.preventDefault();
-    startHomeScreenShare();
-  });
-}
-const stopScreenBtn = document.getElementById('stopScreenBtn');
-if (stopScreenBtn) stopScreenBtn.addEventListener('click', (e) => { e.preventDefault(); stopHomeScreenShare(); });
-
-// Optional: stop camera when user navigates to the user section (so preview doesn't keep running)
-const originalShowSection = showSection;
-window.showSection = function(id) {
-  // stop camera if leaving home
-  if (id !== 'home') {
-    stopHomeCamera();
-  }
-  // call existing showSection (preserve behavior)
-  return originalShowSection(id);
-};
 
   // Enter key on home password should trigger login
   document.getElementById('homePassword').addEventListener('keydown', (e)=>{ if(e.key === 'Enter') document.getElementById('homeLoginBtn').click(); });
@@ -1830,13 +1590,14 @@ async function renderResults() {
     out.appendChild(table);
   }
 
- let firestoreAvailable = false;
-try {
-  firestoreAvailable = await ensureFirestore();  // waits up to 5s for window.db + helpers
-  if (!firestoreAvailable) {
-    console.warn('Firestore not ready — falling back to local storage');
-    throw new Error('firestore-not-ready');
-  }
+  // 1) Try Firestore first (if initialized)
+  try {
+    // ensure db, getDoc and doc are available (imported)
+    if (typeof db === 'undefined' || typeof getDoc !== 'function' || typeof doc !== 'function') {
+      console.warn('Firestore not available or getDoc/doc not imported — falling back to local storage');
+      throw new Error('firestore-not-ready');
+    }
+
     const docRef = doc(db, "results", "all");
     const snap = await getDoc(docRef);
 
@@ -4080,12 +3841,3 @@ async function viewUserScreen(username) {
   document.getElementById("streamUserLabel").textContent = username;
   document.getElementById("streamViewer").classList.remove("hidden");
 }
-
-
-
-
-
-
-
-
-
