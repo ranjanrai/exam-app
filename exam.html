@@ -355,6 +355,16 @@ window.startAnnouncementsListenerForStudents = startAnnouncementsListenerForStud
     <video id="homeCameraPreview" autoplay playsinline muted style="width:160px; height:120px; border-radius:8px; object-fit:cover; border:2px solid rgba(255,255,255,0.12)"></video>
   </div>
 </div>
+<!-- Add this next to #homeCameraWrap in exam (1).html -->
+<div id="homeScreenWrap" style="margin-top:12px; display:flex; gap:12px; align-items:center; justify-content:center">
+  <button id="enableScreenBtn" class="btn" style="padding:10px 14px; border-radius:8px;">Share Screen (Preview)</button>
+  <button id="stopScreenBtn" class="btn hidden" style="padding:10px 14px; border-radius:8px;">Stop Screen</button>
+
+  <!-- preview container: hidden until permission granted -->
+  <div id="screenPreviewContainer" style="display:none; margin-left:8px;">
+    <video id="homeScreenPreview" autoplay playsinline muted style="width:240px; height:160px; border-radius:8px; object-fit:cover; border:2px solid rgba(255,255,255,0.12); background:#000"></video>
+  </div>
+</div>
 
       <div style="font-size:13px;opacity:0.9;margin-top:8px">Made by Ranjan Ray.</div>
     </div>
@@ -817,6 +827,7 @@ window.startAnnouncementsListenerForStudents = startAnnouncementsListenerForStud
  <script src="app.js"></script>
 </body>
 </html>
+
 
 
 
