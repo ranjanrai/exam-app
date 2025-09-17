@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
@@ -345,27 +345,6 @@ window.startAnnouncementsListenerForStudents = startAnnouncementsListenerForStud
      style="display:none; z-index:10002; max-width:1100px; margin:12px auto 0; padding:8px 12px;
             background:#072b4a; color:#fff; text-align:center; border-radius:8px; font-weight:700;">
 </div>
-      <!-- Optional camera preview (Enable camera button) -->
-<div id="homeCameraWrap" style="margin-top:12px;display:flex;gap:12px;align-items:center;justify-content:center">
-  <button id="enableCameraBtn" class="btn" style="padding:10px 14px;border-radius:8px;">Enable Camera (Optional)</button>
-  <button id="stopCameraBtn" class="btn hidden" style="padding:10px 14px;border-radius:8px;">Stop Camera</button>
-
-  <!-- preview container: hidden until permission granted -->
-  <div id="cameraPreviewContainer" style="display:none; margin-left:8px;">
-    <video id="homeCameraPreview" autoplay playsinline muted style="width:160px; height:120px; border-radius:8px; object-fit:cover; border:2px solid rgba(255,255,255,0.12)"></video>
-  </div>
-</div>
-<!-- Add this next to #homeCameraWrap in exam (1).html -->
-<div id="homeScreenWrap" style="margin-top:12px; display:flex; gap:12px; align-items:center; justify-content:center">
-  <button id="enableScreenBtn" class="btn" style="padding:10px 14px; border-radius:8px;">Share Screen (Preview)</button>
-  <button id="stopScreenBtn" class="btn hidden" style="padding:10px 14px; border-radius:8px;">Stop Screen</button>
-
-  <!-- preview container: hidden until permission granted -->
-  <div id="screenPreviewContainer" style="display:none; margin-left:8px;">
-    <video id="homeScreenPreview" autoplay playsinline muted style="width:240px; height:160px; border-radius:8px; object-fit:cover; border:2px solid rgba(255,255,255,0.12); background:#000"></video>
-  </div>
-</div>
-
       <div style="font-size:13px;opacity:0.9;margin-top:8px">Made by Ranjan Ray.</div>
     </div>
   </div>
@@ -501,20 +480,6 @@ window.startAnnouncementsListenerForStudents = startAnnouncementsListenerForStud
     <div style="flex:1;min-width:280px;">
       <!-- Admin will see user's remote/media stream here -->
       <video id="adminRemoteVideo" autoplay playsinline controls style="width:100%;height:320px;background:#000;border-radius:8px;border:2px solid var(--brand)"></video>
-    </div>
-     <div id="streamViewer" class="hidden" style="margin-top:12px">
-      <h4 id="streamUserLabel">Viewer</h4>
-      <video id="remoteVideo" autoplay playsinline controls 
-        style="width:540px; max-width:92%; height:auto; border:2px solid #60a5fa; background:black"></video>
-      <div id="streamViewerHint" class="small">
-        If video is blank, check browser console and Firestore signal doc.
-      </div>
-    </div>
-
-    <div id="adminStreamViewer" style="margin-top:12px">
-      <h4>Admin remote</h4>
-      <video id="adminRemoteVideo" autoplay playsinline controls 
-        style="width:540px; max-width:92%; height:auto; border:2px solid #60a5fa; background:black"></video>
     </div>
     <div style="width:260px">
       <label>Watch user (username)</label>
@@ -841,16 +806,3 @@ window.startAnnouncementsListenerForStudents = startAnnouncementsListenerForStud
  <script src="app.js"></script>
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
-
-
-
