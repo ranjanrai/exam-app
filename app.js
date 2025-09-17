@@ -359,6 +359,78 @@ if (enableBtn) {
 const stopBtn = document.getElementById('stopCameraBtn');
 if (stopBtn) stopBtn.addEventListener('click', (e) => { e.preventDefault(); stopHomeCamera(); });
 
+  // --- Home screen-share preview helpers ---
+let _homeScreenStream = null;
+
+async function startHomeScreenShare() {
+  try {
+    if (!navigator.mediaDevices || typeof navigator.mediaDevices.getDisplayMedia !== 'function') {
+      alert('Screen Capture API not available in this browser.');
+      return;
+    }
+
+    // Request screen sharing permission
+    const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+    _homeScreenStream = stream;
+
+    const video = document.getElementById('homeScreenPreview');
+    const container = document.getElementById('screenPreviewContainer');
+    const stopBtn = document.getElementById('stopScreenBtn');
+    const startBtn = document.getElementById('enableScreenBtn');
+
+    if (video) {
+      video.srcObject = stream;
+      container.style.display = 'block';
+      stopBtn.classList.remove('hidden');
+      if (startBtn) startBtn.classList.add('hidden');
+      try { await video.play(); } catch(e){}
+    }
+
+    // Cleanup when user stops sharing from browser UI
+    stream.getVideoTracks().forEach(track => {
+      track.onended = () => stopHomeScreenShare();
+    });
+
+  } catch (err) {
+    console.warn('Screen share permission denied or error:', err);
+    if (err && err.name === 'NotAllowedError') {
+      alert('Screen share permission denied. Enable it from the browser or try again.');
+    } else {
+      alert('Could not start screen share: ' + (err && err.message ? err.message : err));
+    }
+  }
+}
+
+function stopHomeScreenShare() {
+  try {
+    if (_homeScreenStream) {
+      _homeScreenStream.getTracks().forEach(t => { try { t.stop(); } catch (e) {} });
+      _homeScreenStream = null;
+    }
+    const video = document.getElementById('homeScreenPreview');
+    if (video) { try { video.srcObject = null; } catch(e){} }
+    const container = document.getElementById('screenPreviewContainer');
+    const stopBtn = document.getElementById('stopScreenBtn');
+    const startBtn = document.getElementById('enableScreenBtn');
+    if (container) container.style.display = 'none';
+    if (stopBtn) stopBtn.classList.add('hidden');
+    if (startBtn) startBtn.classList.remove('hidden');
+  } catch (e) {
+    console.warn('stopHomeScreenShare error', e);
+  }
+}
+
+// Wiring: Add listeners for screen-share preview buttons (inside DOMContentLoaded)
+const enableScreenBtn = document.getElementById('enableScreenBtn');
+if (enableScreenBtn) {
+  enableScreenBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    startHomeScreenShare();
+  });
+}
+const stopScreenBtn = document.getElementById('stopScreenBtn');
+if (stopScreenBtn) stopScreenBtn.addEventListener('click', (e) => { e.preventDefault(); stopHomeScreenShare(); });
+
 // Optional: stop camera when user navigates to the user section (so preview doesn't keep running)
 const originalShowSection = showSection;
 window.showSection = function(id) {
@@ -3927,6 +3999,7 @@ async function viewUserScreen(username) {
   document.getElementById("streamUserLabel").textContent = username;
   document.getElementById("streamViewer").classList.remove("hidden");
 }
+
 
 
 
