@@ -1,4 +1,4 @@
-﻿#fsQuestion div {
+#fsQuestion div {
   margin: 0;     /* remove default div margins */
   padding: 0;    /* no extra space */
 }
@@ -193,14 +193,3 @@ min-height:80px
   background: black;
   border: 2px solid var(--brand);
 }
-/* Home camera preview */
-#homeCameraPreview { 
-  width: 160px;
-  height: 120px;
-  border-radius: 8px;
-  object-fit: cover;
-  border: 2px solid rgba(255,255,255,0.12);
-  background: #000;
-}
-#homeCameraWrap .btn { font-weight:700; }
-
