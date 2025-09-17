@@ -1,3 +1,89 @@
+// ---------- Firestore readiness guard (paste at top of app.js) ----------
+/**
+ * Wait for the firebase module initializer to expose window.db and helper functions.
+ * Resolves when ready, rejects after timeoutMs.
+ */
+function waitForFirestoreReady(timeoutMs = 5000) {
+  return new Promise((resolve, reject) => {
+    if (window.db && typeof window.getDoc === 'function' && typeof window.doc === 'function') {
+      return resolve(); // already ready
+    }
+    const start = Date.now();
+    const iv = setInterval(() => {
+      if (window.db && typeof window.getDoc === 'function' && typeof window.doc === 'function') {
+        clearInterval(iv);
+        return resolve();
+      }
+      if (Date.now() - start > timeoutMs) {
+        clearInterval(iv);
+        return reject(new Error('firestore-init-timeout'));
+      }
+    }, 100);
+  });
+}
+
+// Provide local aliases so the rest of app.js can call doc(), getDoc(), etc.
+// These will be set after waitForFirestoreReady resolves.
+let db = window.db || null;
+let docFn = window.doc || null;
+let getDocFn = window.getDoc || null;
+let getDocsFn = window.getDocs || null;
+let collectionFn = window.collection || null;
+let setDocFn = window.setDoc || null;
+let addDocFn = window.addDoc || null;
+let updateDocFn = window.updateDoc || null;
+let onSnapshotFn = window.onSnapshot || null;
+let deleteDocFn = window.deleteDoc || null;
+let queryFn = window.query || null;
+let whereFn = window.where || null;
+let orderByFn = window.orderBy || null;
+
+// Try to populate aliases synchronously if already present
+if (window.db) {
+  db = window.db;
+  docFn = window.doc || docFn;
+  getDocFn = window.getDoc || getDocFn;
+  getDocsFn = window.getDocs || getDocsFn;
+  collectionFn = window.collection || collectionFn;
+  setDocFn = window.setDoc || setDocFn;
+  addDocFn = window.addDoc || addDocFn;
+  updateDocFn = window.updateDoc || updateDocFn;
+  onSnapshotFn = window.onSnapshot || onSnapshotFn;
+  deleteDocFn = window.deleteDoc || deleteDocFn;
+  queryFn = window.query || queryFn;
+  whereFn = window.where || whereFn;
+  orderByFn = window.orderBy || orderByFn;
+}
+
+// Expose a helper consumer function the rest of your file can await before using Firestore
+async function ensureFirestore() {
+  try {
+    await waitForFirestoreReady(5000); // 5s timeout
+    // refresh aliases from window (in case they were set after the initial check)
+    db = window.db;
+    docFn = window.doc;
+    getDocFn = window.getDoc;
+    getDocsFn = window.getDocs;
+    collectionFn = window.collection;
+    setDocFn = window.setDoc;
+    addDocFn = window.addDoc;
+    updateDocFn = window.updateDoc;
+    onSnapshotFn = window.onSnapshot;
+    deleteDocFn = window.deleteDoc;
+    queryFn = window.query;
+    whereFn = window.where;
+    orderByFn = window.orderBy;
+    console.info('Firestore ready: db and helpers available.');
+    return true;
+  } catch (err) {
+    console.warn('Firestore not available within timeout — falling back to local storage', err);
+    return false;
+  }
+}
+// ---------- End guard ----------
+
+
+
 // Ensure db and helpers are available
 const db = window.db;
 const setDoc = window.setDoc;
@@ -1764,14 +1850,13 @@ async function renderResults() {
     out.appendChild(table);
   }
 
-  // 1) Try Firestore first (if initialized)
-  try {
-    // ensure db, getDoc and doc are available (imported)
-    if (typeof db === 'undefined' || typeof getDoc !== 'function' || typeof doc !== 'function') {
-      console.warn('Firestore not available or getDoc/doc not imported — falling back to local storage');
-      throw new Error('firestore-not-ready');
-    }
-
+ let firestoreAvailable = false;
+try {
+  firestoreAvailable = await ensureFirestore();  // waits up to 5s for window.db + helpers
+  if (!firestoreAvailable) {
+    console.warn('Firestore not ready — falling back to local storage');
+    throw new Error('firestore-not-ready');
+  }
     const docRef = doc(db, "results", "all");
     const snap = await getDoc(docRef);
 
@@ -4015,6 +4100,7 @@ async function viewUserScreen(username) {
   document.getElementById("streamUserLabel").textContent = username;
   document.getElementById("streamViewer").classList.remove("hidden");
 }
+
 
 
 
