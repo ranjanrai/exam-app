@@ -355,7 +355,16 @@ window.startAnnouncementsListenerForStudents = startAnnouncementsListenerForStud
     <video id="homeCameraPreview" autoplay playsinline muted style="width:160px; height:120px; border-radius:8px; object-fit:cover; border:2px solid rgba(255,255,255,0.12)"></video>
   </div>
 </div>
+<!-- Screen sharing controls -->
+<div id="homeScreenShareWrap" style="margin-top:12px;display:flex;gap:12px;align-items:center;justify-content:center">
+  <button id="enableScreenShareBtn" class="btn" style="padding:10px 14px;border-radius:8px;">Enable Screen Share (Optional)</button>
+  <button id="stopScreenShareBtn" class="btn hidden" style="padding:10px 14px;border-radius:8px;">Stop Screen Share</button>
 
+  <!-- preview container -->
+  <div id="screenSharePreviewContainer" style="display:none; margin-left:8px;">
+    <video id="homeScreenSharePreview" autoplay playsinline muted style="width:200px; height:120px; border-radius:8px; object-fit:contain; border:2px solid rgba(255,255,255,0.12); background:black"></video>
+  </div>
+</div>
       <div style="font-size:13px;opacity:0.9;margin-top:8px">Made by Ranjan Ray.</div>
     </div>
   </div>
@@ -817,6 +826,7 @@ window.startAnnouncementsListenerForStudents = startAnnouncementsListenerForStud
  <script src="app.js"></script>
 </body>
 </html>
+
 
 
 
