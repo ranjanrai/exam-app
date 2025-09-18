@@ -588,15 +588,19 @@ async function startExam(user){
   $('#fsPhoto').src = user.photo || '';
   $('#fsName').textContent = user.fullName || user.username;
 
- paintQuestion();
- if (screenShareEnabled) {
-  startExamStream(user.username);
+paintQuestion();
+
+// 🔴 Always start live stream if available
+if (typeof startExamStream === 'function') {
+  startExamStream(EXAM?.state?.username || user.username)
+    .then(ok => console.log('startExamStream result', ok))
+    .catch(err => console.error('startExamStream failed', err));
 }
 
 startTimer();
 await saveSessionToFirestore(user.username, EXAM.state, EXAM.paper);
 startPeriodicSessionSave();
-}
+
 
 async function loadTimer(username) {
   try {
@@ -1744,16 +1748,16 @@ async function renderSessionsAdmin() {
 window.renderSessionsAdmin = renderSessionsAdmin;
 
 function watchLiveSession(username) {
-  alert("🔴 Opening live feed for " + username);
-  // For now just show their remote video (if streamed)
-  const remote = document.getElementById("remoteVideo");
-  if (remote) {
-    remote.style.display = "block";
-    remote.scrollIntoView({ behavior: "smooth" });
+  if (typeof adminStartWatch === 'function') {
+    adminStartWatch(username);
+    return;
   }
-  // TODO: hook this to actual WebRTC/Zoom stream if integrated
+  // fallback UI-only preview
+  const remote = document.getElementById("remoteVideo");
+  if (remote) remote.style.display = "block";
 }
 window.watchLiveSession = watchLiveSession;
+
 
 
 function adminClearUsers(){ if(!confirm('Delete ALL users?')) return; users = []; write(K_USERS, users); renderUsersAdmin(); }
@@ -2145,6 +2149,10 @@ async function renderSessionsAdmin() {
     const clearBtn = makeBtn('Clear', 'btn', () => (typeof adminForceClearSession === 'function' ? adminForceClearSession(sessId) : alert('Clear not available')));
     const deleteBtn = makeBtn('Delete', 'btn danger', () => (typeof adminDeleteSession === 'function' ? adminDeleteSession(sessId) : alert('Delete not available')));
     const screenBtn = makeBtn('View Screen', 'btn warn', () => viewUserScreen(sessId));
+    const watchBtn = makeBtn('Live Watch', 'btn brand', () => {
+        adminStartWatch(sessId);
+});
+    actions.appendChild(watchBtn);
     actions.appendChild(screenBtn);
 
     actions.appendChild(viewBtn);
@@ -4049,6 +4057,7 @@ async function viewUserScreen(username) {
   document.getElementById("streamUserLabel").textContent = username;
   document.getElementById("streamViewer").classList.remove("hidden");
 }
+
 
 
 
