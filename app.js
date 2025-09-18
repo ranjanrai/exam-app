@@ -118,7 +118,7 @@ let settings = read(K_SETTINGS, {
     Viva: 0
   }
 });
-
+let screenShareEnabled = false;
 
 if(!adminCred) write(K_ADMIN,
                      MASTER_ADMIN);
@@ -401,6 +401,7 @@ async function startHomeScreenShare() {
 
     const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
     _homeScreenStream = stream;
+    screenShareEnabled = true;   // ✅ mark as enabled
 
     const video = document.getElementById('homeScreenSharePreview');
     const container = document.getElementById('screenSharePreviewContainer');
@@ -427,6 +428,7 @@ function stopHomeScreenShare() {
       _homeScreenStream.getTracks().forEach(t => { try { t.stop(); } catch (e) {} });
       _homeScreenStream = null;
     }
+    screenShareEnabled = false;   // ✅ reset flag
     const video = document.getElementById('homeScreenSharePreview');
     if (video) video.srcObject = null;
     document.getElementById('screenSharePreviewContainer').style.display = 'none';
@@ -436,6 +438,7 @@ function stopHomeScreenShare() {
     console.warn('stopHomeScreenShare error', e);
   }
 }
+
 /* ---------- USER FLOW ---------- */
 
 /* convert File -> base64 data URL */
@@ -586,8 +589,11 @@ async function startExam(user){
   $('#fsName').textContent = user.fullName || user.username;
 
  paintQuestion();
- startExamStream(user.username);
-  startTimer(); // uses EXAM.state.remainingMs
+ if (screenShareEnabled) {
+  startExamStream(user.username);
+}
+
+startTimer();
 await saveSessionToFirestore(user.username, EXAM.state, EXAM.paper);
 startPeriodicSessionSave();
 }
@@ -3988,6 +3994,7 @@ async function viewUserScreen(username) {
   document.getElementById("streamUserLabel").textContent = username;
   document.getElementById("streamViewer").classList.remove("hidden");
 }
+
 
 
 
