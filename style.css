@@ -204,3 +204,12 @@ min-height:80px
 }
 #homeCameraWrap .btn { font-weight:700; }
 
+
+#homeScreenSharePreview {
+  width: 200px;
+  height: 120px;
+  border-radius: 8px;
+  border: 2px solid rgba(255,255,255,0.12);
+  background: #000;
+  object-fit: contain;
+}
