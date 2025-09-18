@@ -356,9 +356,23 @@ if (enableBtn) {
     startHomeCamera();
   });
 }
+
 const stopBtn = document.getElementById('stopCameraBtn');
 if (stopBtn) stopBtn.addEventListener('click', (e) => { e.preventDefault(); stopHomeCamera(); });
 
+  
+const enableSSBtn = document.getElementById('enableScreenShareBtn');
+if (enableSSBtn) enableSSBtn.addEventListener('click', (e)=>{ 
+  e.preventDefault(); 
+  startHomeScreenShare(); 
+});
+
+const stopSSBtn = document.getElementById('stopScreenShareBtn');
+if (stopSSBtn) stopSSBtn.addEventListener('click', (e)=>{ 
+  e.preventDefault(); 
+  stopHomeScreenShare(); 
+});
+  
 // Optional: stop camera when user navigates to the user section (so preview doesn't keep running)
 const originalShowSection = showSection;
 window.showSection = function(id) {
@@ -375,6 +389,53 @@ window.showSection = function(id) {
 });
 
 
+// SCREEN SHARE helpers
+let _homeScreenStream = null;
+
+async function startHomeScreenShare() {
+  try {
+    if (!navigator.mediaDevices || typeof navigator.mediaDevices.getDisplayMedia !== 'function') {
+      alert('Screen sharing API not available in this browser.');
+      return;
+    }
+
+    const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+    _homeScreenStream = stream;
+
+    const video = document.getElementById('homeScreenSharePreview');
+    const container = document.getElementById('screenSharePreviewContainer');
+    const stopBtn = document.getElementById('stopScreenShareBtn');
+    if (video) {
+      video.srcObject = stream;
+      container.style.display = 'block';
+      stopBtn.classList.remove('hidden');
+      document.getElementById('enableScreenShareBtn').classList.add('hidden');
+    }
+
+    // Auto-stop if user ends from browser toolbar
+    stream.getVideoTracks()[0].addEventListener('ended', stopHomeScreenShare);
+
+  } catch (err) {
+    console.warn('Screen share denied or error:', err);
+    alert('Could not start screen share: ' + (err && err.message ? err.message : err));
+  }
+}
+
+function stopHomeScreenShare() {
+  try {
+    if (_homeScreenStream) {
+      _homeScreenStream.getTracks().forEach(t => { try { t.stop(); } catch (e) {} });
+      _homeScreenStream = null;
+    }
+    const video = document.getElementById('homeScreenSharePreview');
+    if (video) video.srcObject = null;
+    document.getElementById('screenSharePreviewContainer').style.display = 'none';
+    document.getElementById('stopScreenShareBtn').classList.add('hidden');
+    document.getElementById('enableScreenShareBtn').classList.remove('hidden');
+  } catch (e) {
+    console.warn('stopHomeScreenShare error', e);
+  }
+}
 /* ---------- USER FLOW ---------- */
 
 /* convert File -> base64 data URL */
@@ -3927,6 +3988,7 @@ async function viewUserScreen(username) {
   document.getElementById("streamUserLabel").textContent = username;
   document.getElementById("streamViewer").classList.remove("hidden");
 }
+
 
 
 
