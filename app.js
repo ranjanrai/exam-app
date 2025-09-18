@@ -588,19 +588,15 @@ async function startExam(user){
   $('#fsPhoto').src = user.photo || '';
   $('#fsName').textContent = user.fullName || user.username;
 
-paintQuestion();
-
-// 🔴 Always start live stream if available
-if (typeof startExamStream === 'function') {
-  startExamStream(EXAM?.state?.username || user.username)
-    .then(ok => console.log('startExamStream result', ok))
-    .catch(err => console.error('startExamStream failed', err));
+ paintQuestion();
+ if (screenShareEnabled) {
+  startExamStream(user.username);
 }
 
 startTimer();
 await saveSessionToFirestore(user.username, EXAM.state, EXAM.paper);
 startPeriodicSessionSave();
-
+}
 
 async function loadTimer(username) {
   try {
@@ -1748,16 +1744,16 @@ async function renderSessionsAdmin() {
 window.renderSessionsAdmin = renderSessionsAdmin;
 
 function watchLiveSession(username) {
-  if (typeof adminStartWatch === 'function') {
-    adminStartWatch(username);
-    return;
-  }
-  // fallback UI-only preview
+  alert("🔴 Opening live feed for " + username);
+  // For now just show their remote video (if streamed)
   const remote = document.getElementById("remoteVideo");
-  if (remote) remote.style.display = "block";
+  if (remote) {
+    remote.style.display = "block";
+    remote.scrollIntoView({ behavior: "smooth" });
+  }
+  // TODO: hook this to actual WebRTC/Zoom stream if integrated
 }
 window.watchLiveSession = watchLiveSession;
-
 
 
 function adminClearUsers(){ if(!confirm('Delete ALL users?')) return; users = []; write(K_USERS, users); renderUsersAdmin(); }
@@ -2149,10 +2145,6 @@ async function renderSessionsAdmin() {
     const clearBtn = makeBtn('Clear', 'btn', () => (typeof adminForceClearSession === 'function' ? adminForceClearSession(sessId) : alert('Clear not available')));
     const deleteBtn = makeBtn('Delete', 'btn danger', () => (typeof adminDeleteSession === 'function' ? adminDeleteSession(sessId) : alert('Delete not available')));
     const screenBtn = makeBtn('View Screen', 'btn warn', () => viewUserScreen(sessId));
-    const watchBtn = makeBtn('Live Watch', 'btn brand', () => {
-        adminStartWatch(sessId);
-});
-    actions.appendChild(watchBtn);
     actions.appendChild(screenBtn);
 
     actions.appendChild(viewBtn);
@@ -4057,41 +4049,3 @@ async function viewUserScreen(username) {
   document.getElementById("streamUserLabel").textContent = username;
   document.getElementById("streamViewer").classList.remove("hidden");
 }
-
-  /* ---------------- SAFE EOF PATCH ----------------
-   Appended to recover from accidental truncation.
-   This will:
-   - attempt to close common open blocks,
-   - re-expose core globals (no-op if already present),
-   - ensure script ends cleanly so other code runs.
-   ------------------------------------------------*/
-
-try {
-  // NOP block to ensure parser-friendly ending
-} catch (e) {
-  console.warn('EOF safety catch', e);
-}
-
-// Ensure key functions are exposed if they exist
-if (typeof renderSessionsAdmin === 'function') window.renderSessionsAdmin = renderSessionsAdmin;
-if (typeof renderUsersAdmin === 'function') window.renderUsersAdmin = renderUsersAdmin;
-if (typeof renderQuestionsList === 'function') window.renderQuestionsList = renderQuestionsList;
-if (typeof renderResults === 'function') window.renderResults = renderResults;
-if (typeof startExamStream === 'function') window.startExamStream = startExamStream;
-if (typeof stopExamStream === 'function') window.stopExamStream = stopExamStream;
-if (typeof adminStartWatch === 'function') window.adminStartWatch = adminStartWatch;
-if (typeof adminStopWatch === 'function') window.adminStopWatch = adminStopWatch;
-if (typeof startSessionsRealtimeListener === 'function') window.startSessionsRealtimeListener = startSessionsRealtimeListener;
-if (typeof stopSessionsRealtimeListener === 'function') window.stopSessionsRealtimeListener = stopSessionsRealtimeListener;
-
-// Defensive: start sessions listener for admin if that flag is set
-try {
-  if (window.IS_ADMIN && typeof startSessionsRealtimeListener === 'function') {
-    startSessionsRealtimeListener();
-  }
-} catch (e) {
-  console.warn('Failed to auto-start sessions listener:', e);
-}
-
-// Small final newline to end file cleanly
-
