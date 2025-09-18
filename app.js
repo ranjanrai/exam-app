@@ -4057,11 +4057,3 @@ async function viewUserScreen(username) {
   document.getElementById("streamUserLabel").textContent = username;
   document.getElementById("streamViewer").classList.remove("hidden");
 }
-
-
-
-
-
-
-
-
