@@ -190,9 +190,13 @@ min-height:80px
   }
 }
 #remoteVideo {
+  display: none;   /* ✅ hidden by default */
   background: black;
   border: 2px solid var(--brand);
+  width: 320px;    /* optional: fixed size */
+  height: 240px;   /* optional: fixed size */
 }
+
 /* Home camera preview */
 #homeCameraPreview { 
   width: 160px;
@@ -213,3 +217,4 @@ min-height:80px
   background: #000;
   object-fit: contain;
 }
+
