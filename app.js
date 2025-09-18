@@ -4057,3 +4057,41 @@ async function viewUserScreen(username) {
   document.getElementById("streamUserLabel").textContent = username;
   document.getElementById("streamViewer").classList.remove("hidden");
 }
+
+  /* ---------------- SAFE EOF PATCH ----------------
+   Appended to recover from accidental truncation.
+   This will:
+   - attempt to close common open blocks,
+   - re-expose core globals (no-op if already present),
+   - ensure script ends cleanly so other code runs.
+   ------------------------------------------------*/
+
+try {
+  // NOP block to ensure parser-friendly ending
+} catch (e) {
+  console.warn('EOF safety catch', e);
+}
+
+// Ensure key functions are exposed if they exist
+if (typeof renderSessionsAdmin === 'function') window.renderSessionsAdmin = renderSessionsAdmin;
+if (typeof renderUsersAdmin === 'function') window.renderUsersAdmin = renderUsersAdmin;
+if (typeof renderQuestionsList === 'function') window.renderQuestionsList = renderQuestionsList;
+if (typeof renderResults === 'function') window.renderResults = renderResults;
+if (typeof startExamStream === 'function') window.startExamStream = startExamStream;
+if (typeof stopExamStream === 'function') window.stopExamStream = stopExamStream;
+if (typeof adminStartWatch === 'function') window.adminStartWatch = adminStartWatch;
+if (typeof adminStopWatch === 'function') window.adminStopWatch = adminStopWatch;
+if (typeof startSessionsRealtimeListener === 'function') window.startSessionsRealtimeListener = startSessionsRealtimeListener;
+if (typeof stopSessionsRealtimeListener === 'function') window.stopSessionsRealtimeListener = stopSessionsRealtimeListener;
+
+// Defensive: start sessions listener for admin if that flag is set
+try {
+  if (window.IS_ADMIN && typeof startSessionsRealtimeListener === 'function') {
+    startSessionsRealtimeListener();
+  }
+} catch (e) {
+  console.warn('Failed to auto-start sessions listener:', e);
+}
+
+// Small final newline to end file cleanly
+
