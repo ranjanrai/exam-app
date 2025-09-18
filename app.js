@@ -1425,6 +1425,7 @@ async function submitExam(auto = false) {
   // 🔹 Clear session so user cannot resume
   await _clearSessionAfterSubmit(EXAM.state.username);
   stopPeriodicSessionSave();
+  stopExamStream();
 
   // 🔹 Show score & redirect
   $('#fsQuestion').innerHTML = `
@@ -3764,6 +3765,7 @@ async function startExamStream(username) {
     console.warn("startExamStream: missing username");
     return false;
   }
+  
 
   // cleanup any previous stream/pc
   try { await stopExamStream(); } catch(e){}
@@ -3791,12 +3793,14 @@ async function startExamStream(username) {
   }
 
   // show local preview in user's UI (muted)
-  const previewEl = document.getElementById("remoteVideo");
-  if (previewEl) {
-    previewEl.srcObject = stream;
-    previewEl.muted = true;
-    try { await previewEl.play(); } catch(e) {}
-  }
+ const previewEl = document.getElementById("remoteVideo");
+if (previewEl) {
+  previewEl.srcObject = stream;
+  previewEl.muted = true;
+  try { await previewEl.play(); } catch(e) {}
+  previewEl.style.display = "block";   // ✅ show only when stream works
+}
+
 
   // build peer connection
   const pc = new RTCPeerConnection(RTC_CONFIG);
@@ -3994,6 +3998,7 @@ async function viewUserScreen(username) {
   document.getElementById("streamUserLabel").textContent = username;
   document.getElementById("streamViewer").classList.remove("hidden");
 }
+
 
 
 
