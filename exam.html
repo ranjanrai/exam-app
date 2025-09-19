@@ -640,6 +640,8 @@ window.startAnnouncementsListenerForStudents = startAnnouncementsListenerForStud
         <h3>Questions</h3>
         <div id="questionsList" class="list"></div>
         <div style="margin-top:8px" class="row">
+          <input type="file" id="importFileInput" accept=".json" style="display:none" />
+<button class="btn warn" onclick="document.getElementById('importFileInput').click()">Import Questions (.json)</button>
           <button class="btn" onclick="exportQuestions()">Export questions (.json)</button>
           <button class="btn danger" onclick="clearAllQuestions()">Delete All</button>
         </div>
@@ -833,3 +835,4 @@ window.startAnnouncementsListenerForStudents = startAnnouncementsListenerForStud
  <script src="app.js"></script>
 </body>
 </html>
+
