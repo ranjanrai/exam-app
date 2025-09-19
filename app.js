@@ -305,7 +305,10 @@ document.addEventListener('DOMContentLoaded', ()=> {
   }
 
 // CAMERA permission preview helpers (put inside DOMContentLoaded)
+// ensure stream is accessible across functions / sections
 let _homeCameraStream = null;
+window._homeCameraStream = _homeCameraStream;
+
 
 async function startHomeCamera() {
   try {
@@ -344,21 +347,20 @@ async function startHomeCamera() {
 
 function stopHomeCamera() {
   try {
-    // stop all tracks
     if (_homeCameraStream) {
-      _homeCameraStream.getTracks().forEach(t => {
-        try { t.stop(); } catch (e) {}
-      });
+      _homeCameraStream.getTracks().forEach(t => { try { t.stop(); } catch (e) {} });
       _homeCameraStream = null;
+      window._homeCameraStream = null;
     }
-    // hide preview & toggle buttons
     const video = document.getElementById('homeCameraPreview');
-    if (video) {
-      try { video.srcObject = null; } catch(e){}
-    }
+    if (video) { try { video.srcObject = null; } catch(e){} }
+    // clear exam camera preview if present
+    const examCam = document.getElementById('examCameraPreview');
+    if (examCam) { try { examCam.srcObject = null; examCam.style.display = 'none'; } catch(e){} }
+
     const container = document.getElementById('cameraPreviewContainer');
-    const stopBtn = document.getElementById('stopCameraBtn');
     if (container) container.style.display = 'none';
+    const stopBtn = document.getElementById('stopCameraBtn');
     if (stopBtn) stopBtn.classList.add('hidden');
     const enableBtn = document.getElementById('enableCameraBtn');
     if (enableBtn) enableBtn.classList.remove('hidden');
@@ -368,6 +370,7 @@ function stopHomeCamera() {
     console.warn('stopHomeCamera error', e);
   }
 }
+
 
 // Wiring: Add listeners to the buttons (inside DOMContentLoaded)
 const enableBtn = document.getElementById('enableCameraBtn');
@@ -394,16 +397,21 @@ if (stopSSBtn) stopSSBtn.addEventListener('click', (e)=>{
   stopHomeScreenShare(); 
 });
   
-// Optional: stop camera when user navigates to the user section (so preview doesn't keep running)
+// Preserve camera while navigating inside app (user/admin/exam).
 const originalShowSection = showSection;
 window.showSection = function(id) {
-  // stop camera if leaving home
-  if (id !== 'home') {
+  // sections where camera should continue running and be available
+  const preserve = ['user', 'adminPanel', 'examFullscreen'];
+  // if going back to home, stop camera
+  if (id === 'home') {
+    stopHomeCamera();
+  } else if (!preserve.includes(id)) {
+    // For any other out-of-app sections not in preserve list, stop camera
     stopHomeCamera();
   }
-  // call existing showSection (preserve behavior)
   return originalShowSection(id);
 };
+
 
   // Enter key on home password should trigger login
   document.getElementById('homePassword').addEventListener('keydown', (e)=>{ if(e.key === 'Enter') document.getElementById('homeLoginBtn').click(); });
@@ -609,15 +617,49 @@ async function startExam(user){
   $('#fsPhoto').src = user.photo || '';
   $('#fsName').textContent = user.fullName || user.username;
 
- paintQuestion();
- if (screenShareEnabled) {
-  startExamStream(user.username);
-}
+  paintQuestion();
 
-startTimer();
-await saveSessionToFirestore(user.username, EXAM.state, EXAM.paper);
-startPeriodicSessionSave();
-}
+  // --- Attach the home camera stream into the exam UI if available ---
+  try {
+    // prefer an existing video element placeholder if present
+    let examCam = document.getElementById('examCameraPreview');
+    if (!examCam) {
+      // create a small preview video in the fsUser area
+      const fsUser = document.getElementById('fsUser');
+      examCam = document.createElement('video');
+      examCam.id = 'examCameraPreview';
+      examCam.autoplay = true;
+      examCam.playsInline = true;
+      examCam.muted = true; // prevent echo/auto-play policy issues
+      examCam.style.width = '120px';
+      examCam.style.height = '120px';
+      examCam.style.objectFit = 'cover';
+      examCam.style.borderRadius = '8px';
+      examCam.style.marginTop = '8px';
+      if (fsUser) fsUser.appendChild(examCam);
+      else document.getElementById('examInner').appendChild(examCam);
+    }
+
+    // attach stream if present
+    if (window._homeCameraStream) {
+      try { examCam.srcObject = window._homeCameraStream; }
+      catch (e) { examCam.src = URL.createObjectURL(window._homeCameraStream); }
+      examCam.style.display = 'block';
+    } else {
+      examCam.style.display = 'none';
+    }
+  } catch (e) {
+    console.warn('Could not attach camera stream to exam UI', e);
+  }
+
+  if (screenShareEnabled) {
+    startExamStream(user.username);
+  }
+
+  startTimer();
+  await saveSessionToFirestore(user.username, EXAM.state, EXAM.paper);
+  startPeriodicSessionSave();
+
 
 async function loadTimer(username) {
   try {
@@ -4070,4 +4112,5 @@ async function viewUserScreen(username) {
   document.getElementById("streamUserLabel").textContent = username;
   document.getElementById("streamViewer").classList.remove("hidden");
 }
+
 
