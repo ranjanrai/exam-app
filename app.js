@@ -1164,34 +1164,69 @@ function startTimer() {
   }, 500);
 }
 // ---- Lock / unlock helpers (improved) ----
-async function lockExamForUser(reason = '') {
-  if (!EXAM.state || !EXAM.state.username) return;
-  try {
-    EXAM.state.locked = true;
-    EXAM.state.lockReason = reason || '';
-    // save immediately so admin sees it
-    if (typeof saveSessionToFirestore === 'function') {
-      await saveSessionToFirestore(EXAM.state.username, EXAM.state, EXAM.paper);
-    } else {
-      // fallback: write minimal payload
-      await setDoc(doc(db, "sessions", EXAM.state.username), {
-        locked: true,
-        lockReason: EXAM.state.lockReason,
-        updatedAt: Date.now()
-      }, { merge: true });
-    }
-  } catch (err) {
-    console.warn("lockExamForUser: failed to persist session", err);
+async function unlockExamForUser(username, by = 'admin') {
+  // If called without username, try to use current exam state
+  const userToUnlock = username || (EXAM && EXAM.state && EXAM.state.username) || null;
+  if (!userToUnlock) {
+    console.warn('unlockExamForUser: no username provided and no EXAM state available');
+    return false;
   }
 
-  // show lock UI locally (if not shown already)
-  try { $('#lockScreen').style.display = 'flex'; } catch(e){}
+  try {
+    // Build payload to persist: mark unlocked and record metadata
+    const payload = {
+      locked: false,
+      lockReason: '',       // clear reason
+      unlockedBy: by || 'admin',
+      unlockedAt: Date.now(),
+      updatedAt: Date.now()
+    };
 
-  // Force refresh admin sessions instantly (if admin is viewing)
-  if (window.IS_ADMIN && typeof renderSessionsAdmin === 'function') {
-    try { renderSessionsAdmin(); } catch (e) { console.warn(e); }
+    // If we have an in-memory session (EXAM.state) merge useful fields
+    try {
+      if (EXAM && EXAM.state && EXAM.state.username === userToUnlock) {
+        // Optionally add remainingMs / answers so admin sees up-to-date state
+        payload.remainingMs = typeof EXAM.state.remainingMs === 'number' ? EXAM.state.remainingMs : undefined;
+        payload.answers = EXAM.state.answers ? EXAM.state.answers : undefined;
+        payload.flags = EXAM.state.flags ? EXAM.state.flags : undefined;
+      }
+    } catch (e) {
+      // ignore merging errors, still proceed to persist payload
+    }
+
+    // Prefer the lightweight save helper that your app uses
+    if (typeof saveSessionToFirestore === 'function') {
+      // merge with EXAM.state if available using proper spread syntax
+      const merged = EXAM && EXAM.state && EXAM.state.username === userToUnlock
+        ? { ...EXAM.state, ...payload }
+        : { ...payload };
+      await saveSessionToFirestore(userToUnlock, merged, EXAM.paper);
+    } else {
+      // fallback: persist minimal payload to Firestore sessions/{username}
+      await setDoc(doc(db, "sessions", userToUnlock), payload, { merge: true });
+    }
+
+    // locally, if this is the currently running exam, update state
+    if (EXAM && EXAM.state && EXAM.state.username === userToUnlock) {
+      EXAM.state.locked = false;
+      EXAM.state.lockReason = '';
+    }
+
+    // hide lock UI locally if present
+    try { const lockEl = $('#lockScreen'); if (lockEl) lockEl.style.display = 'none'; } catch(e){}
+
+    // refresh admin sessions UI if admin is viewing
+    if (window.IS_ADMIN && typeof renderSessionsAdmin === 'function') {
+      try { renderSessionsAdmin(); } catch (e) { console.warn('renderSessionsAdmin error', e); }
+    }
+
+    return true;
+  } catch (err) {
+    console.warn('unlockExamForUser: failed to unlock/persist session', err);
+    return false;
   }
 }
+
 
 async function unlockExamForUser() {
   if (!EXAM?.state || !EXAM.state.username) return;
@@ -4112,6 +4147,7 @@ async function viewUserScreen(username) {
   document.getElementById("streamUserLabel").textContent = username;
   document.getElementById("streamViewer").classList.remove("hidden");
 }
+
 
 
 
