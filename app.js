@@ -568,7 +568,7 @@ function buildPaper(qbank, shuffle){
   }));
 }
 
-async function startExam(user){
+async function startExam(user) {
   enterFullscreen(document.documentElement); // force fullscreen
 
   // --- Use Firestore settings as source of truth
@@ -599,15 +599,13 @@ async function startExam(user){
   EXAM.cur = 0;
 
   // --- Optional resume logic (only if you WANT it)
-  // Add a checkbox in admin to set settings.resumeEnabled if you need this behavior.
   if (settings.resumeEnabled === true) {
     const resume = await loadTimer(user.username); // should return { remainingMs } or null
     if (resume && typeof resume.remainingMs === "number") {
-      // Clamp to [0, durationMs] to avoid weird values
       const clamped = Math.min(Math.max(0, resume.remainingMs), durationMs);
       if (clamped > 0 && clamped < durationMs) {
         EXAM.state.remainingMs = clamped;
-        console.log(`↩ Resuming with ${Math.round(clamped/60000)} min left`);
+        console.log(`↩ Resuming with ${Math.round(clamped / 60000)} min left`);
       }
     }
   }
@@ -621,10 +619,8 @@ async function startExam(user){
 
   // --- Attach the home camera stream into the exam UI if available ---
   try {
-    // prefer an existing video element placeholder if present
     let examCam = document.getElementById('examCameraPreview');
     if (!examCam) {
-      // create a small preview video in the fsUser area
       const fsUser = document.getElementById('fsUser');
       examCam = document.createElement('video');
       examCam.id = 'examCameraPreview';
@@ -640,10 +636,12 @@ async function startExam(user){
       else document.getElementById('examInner').appendChild(examCam);
     }
 
-    // attach stream if present
     if (window._homeCameraStream) {
-      try { examCam.srcObject = window._homeCameraStream; }
-      catch (e) { examCam.src = URL.createObjectURL(window._homeCameraStream); }
+      try {
+        examCam.srcObject = window._homeCameraStream;
+      } catch (e) {
+        examCam.src = URL.createObjectURL(window._homeCameraStream);
+      }
       examCam.style.display = 'block';
     } else {
       examCam.style.display = 'none';
@@ -659,6 +657,8 @@ async function startExam(user){
   startTimer();
   await saveSessionToFirestore(user.username, EXAM.state, EXAM.paper);
   startPeriodicSessionSave();
+} // ✅ this closing brace was missing
+
 
 
 async function loadTimer(username) {
@@ -4112,5 +4112,6 @@ async function viewUserScreen(username) {
   document.getElementById("streamUserLabel").textContent = username;
   document.getElementById("streamViewer").classList.remove("hidden");
 }
+
 
 
