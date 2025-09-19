@@ -798,11 +798,13 @@ window.startAnnouncementsListenerForStudents = startAnnouncementsListenerForStud
   <div id="examInner">
     <div id="fsUser">
       <img id="fsPhoto" src="" alt="photo">
-     <video id="examCameraPreview" ... ></video>
+     <!-- Student Live Camera Preview -->
+  <video id="examCameraPreview" autoplay playsinline muted
+         style="width:120px;height:120px;border-radius:12px;object-fit:cover;margin-top:12px;display:none;"></video>
 
-<!-- Remote stream (admin or other) -->
-<video id="remoteVideo" autoplay playsinline muted
-       style="width:20%;max-height:50px;border-radius:12px;margin-top:12px"></video>
+  <!-- Remote stream (admin monitoring) -->
+  <video id="remoteVideo" autoplay playsinline muted
+         style="width:20%;max-height:50px;border-radius:12px;margin-top:12px"></video>
 
       <h2 id="fsName"></h2>
       <div class="small" id="fsMeta"></div>
@@ -836,5 +838,6 @@ window.startAnnouncementsListenerForStudents = startAnnouncementsListenerForStud
  <script src="app.js"></script>
 </body>
 </html>
+
 
 
