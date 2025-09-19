@@ -283,6 +283,27 @@ document.addEventListener('DOMContentLoaded', ()=> {
       alert('Login handler not found – ensure handleUserLogin exists.');
     }
   });
+
+    // --- Import backup wiring ---
+  const importFileInput = document.getElementById('importFileInput');
+  if (importFileInput) {
+    importFileInput.addEventListener('change', (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      if (!file.name.toLowerCase().endsWith('.json')) {
+        alert('Please select a .json backup file');
+        importFileInput.value = '';
+        return;
+      }
+      if (!confirm('Importing will overwrite local users, questions, results and settings. Proceed?')) {
+        importFileInput.value = '';
+        return;
+      }
+      importFullBackup(file);
+      importFileInput.value = ''; // reset after use
+    });
+  }
+
 // CAMERA permission preview helpers (put inside DOMContentLoaded)
 let _homeCameraStream = null;
 
@@ -4049,3 +4070,4 @@ async function viewUserScreen(username) {
   document.getElementById("streamUserLabel").textContent = username;
   document.getElementById("streamViewer").classList.remove("hidden");
 }
+
