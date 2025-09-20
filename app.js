@@ -3909,160 +3909,144 @@ function hideVisitorMessage() {
 /* ---------------- HYBRID EXAM STREAMING ---------------- */
 
 // Hybrid startExamStream: try screen share then camera, publish offer + ICE to screenSignals/{username}
-async function startExamStream(username) {
-  if (!username) {
-    console.warn("startExamStream: missing username");
-    return false;
-  }
-  
+// ===== Dual-mode stream starter (camera <-> screen) =====
+let _currentStream = null;
+let _currentMode = 'camera'; // 'camera' or 'screen'
 
-  // cleanup any previous stream/pc
-  try { await stopExamStream(); } catch(e){}
-
-  const RTC_CONFIG = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
-
-  let stream = null;
-  let usedScreen = false;
+function stopCurrentStream() {
+  if (!_currentStream) return;
   try {
-    // try screen share first
-    stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
-    usedScreen = true;
-    console.log("✔️ Using screen share for stream");
-  } catch (err) {
-    console.warn("Screen share failed / denied — falling back to camera:", err);
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-      usedScreen = false;
-      console.log("✔️ Using camera for stream");
-    } catch (err2) {
-      console.error("❌ Failed to acquire any media:", err2);
-      alert("Unable to access screen or camera. Please allow permission and try again.");
-      return false;
-    }
+    _currentStream.getTracks().forEach(t => t.stop());
+  } catch (e) {
+    console.warn('stopCurrentStream error', e);
   }
-
-  // show local preview in user's UI (muted)
- const previewEl = document.getElementById("remoteVideo");
-if (previewEl) {
-  previewEl.srcObject = stream;
-  previewEl.muted = true;
-  try { await previewEl.play(); } catch(e) {}
-  previewEl.style.display = "block";   // ✅ show only when stream works
+  _currentStream = null;
+  const previewEl = document.getElementById('remoteVideo');
+  if (previewEl) {
+    try { previewEl.srcObject = null; } catch (e) {}
+  }
 }
 
+async function acquireScreenStream() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+    throw new Error('getDisplayMedia not supported');
+  }
+  return await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+}
 
-  // build peer connection
-  const pc = new RTCPeerConnection(RTC_CONFIG);
-  window._userPC = pc; // keep reference for later cleanup
+async function acquireCameraStream() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    throw new Error('getUserMedia not supported');
+  }
+  return await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+}
 
-  // add tracks
-  stream.getTracks().forEach(track => pc.addTrack(track, stream));
+/**
+ * Start the exam stream.
+ * @param {string} username Optional username (used by your app logs). Pass null/undefined if not used.
+ * @param {{preferScreen?: boolean}} opts
+ */
+async function startExamStream(username, opts = {}) {
+  const preferScreen = !!opts.preferScreen;
+  const previewEl = document.getElementById('remoteVideo');
+  const statusEl = document.getElementById('streamStatus');
+  const modeText = (m) => `Mode: ${m}`;
 
-  // Firestore signaling locations
-  // collection(db, "screenSignals") -> doc(username) -> subcollections offerCandidates / answerCandidates
-  const callDoc = doc(collection(db, "screenSignals"), username);
-  const offerCandidatesCol = collection(callDoc, "offerCandidates");
-  const answerCandidatesCol = collection(callDoc, "answerCandidates");
+  console.log('▶️ startExamStream for', username, 'preferScreen=', preferScreen);
+  statusEl && (statusEl.textContent = modeText(preferScreen ? 'screen (starting...)' : 'camera (starting...)'));
 
-  // onicecandidate -> upload to offerCandidates
-  pc.onicecandidate = event => {
-    if (event.candidate) {
+  // stop any existing stream
+  stopCurrentStream();
+
+  try {
+    if (preferScreen) {
       try {
-        addDoc(offerCandidatesCol, event.candidate.toJSON()).catch(e => {
-          console.warn("addDoc(offerCandidates) failed:", e);
-        });
-      } catch (e) {
-        console.warn("Failed to write candidate:", e);
+        _currentStream = await acquireScreenStream();
+        _currentMode = 'screen';
+        console.log('✅ got display media stream');
+      } catch (err) {
+        console.warn('⚠️ getDisplayMedia failed, falling back to camera', err);
+        // fallback to camera
+        _currentStream = await acquireCameraStream();
+        _currentMode = 'camera';
+        console.log('✅ got camera media stream (fallback)');
+      }
+    } else {
+      // prefer camera
+      _currentStream = await acquireCameraStream();
+      _currentMode = 'camera';
+      console.log('✅ got camera media stream');
+    }
+
+    // attach to video element
+    if (previewEl) {
+      // make it visible and decently sized (helpful during debugging)
+      previewEl.style.display = 'block';
+      previewEl.style.width = '160px';
+      previewEl.style.height = '120px';
+      previewEl.style.objectFit = 'cover';
+      previewEl.srcObject = _currentStream;
+
+      // muted is recommended for autoplay; ensure it's set
+      previewEl.muted = true;
+
+      try {
+        await previewEl.play();
+      } catch (playErr) {
+        // autoplay may be blocked; still check srcObject in console
+        console.warn('play() failed (autoplay policy?)', playErr);
       }
     }
-  };
 
-  // diagnostic
-  pc.onconnectionstatechange = () => {
-    console.log("PC state:", pc.connectionState);
-  };
-
-  try {
-    // create offer and set local description
-    const offerDescription = await pc.createOffer();
-    await pc.setLocalDescription(offerDescription);
-
-    // write offer doc (overwrites previous)
-    await setDoc(callDoc, {
-      offer: {
-        type: offerDescription.type,
-        sdp: offerDescription.sdp,
-        usedScreen: !!usedScreen,
-        createdAt: Date.now()
-      }
-    });
-
-    console.log("📡 Published offer to screenSignals/", username);
-
-    // listen for answer doc — set remote description when available
-    const unsubAnswerDoc = onSnapshot(callDoc, async snap => {
-      const data = snap.exists() ? snap.data() : null;
-      if (!data) return;
-      if (data.answer && pc && pc.signalingState !== "closed") {
-        try {
-          // avoid resetting if already set to same SDP
-          const answer = data.answer;
-          if (!pc.currentRemoteDescription || pc.currentRemoteDescription.sdp !== answer.sdp) {
-            const answerDesc = new RTCSessionDescription({ type: answer.type, sdp: answer.sdp });
-            await pc.setRemoteDescription(answerDesc);
-            console.log("✅ Remote answer applied from Firestore");
-          }
-        } catch (err) {
-          console.warn("Failed to set remote description (answer):", err);
-        }
-      }
-    });
-
-    // listen for admin answer ICE candidates (admins write into answerCandidates)
-    const unsubAnswerCandidates = onSnapshot(answerCandidatesCol, snap => {
-      snap.docChanges().forEach(async change => {
-        if (change.type === "added") {
-          const cand = change.doc.data();
-          if (cand) {
-            try {
-              await pc.addIceCandidate(new RTCIceCandidate(cand));
-              console.log("➕ Added remote ICE candidate from admin");
-            } catch (e) {
-              console.warn("addIceCandidate failed for admin candidate:", e);
-            }
-          }
-        }
-      });
-    });
-
-    // save references for cleanup
-    window._userSignaling = {
-      callDocRef: callDoc,
-      offerCandidatesColRef: offerCandidatesCol,
-      answerCandidatesColRef: answerCandidatesCol,
-      unsubAnswerDoc,
-      unsubAnswerCandidates,
-      usedScreen
-    };
-
-    console.log("📡 Stream started and signaling listeners attached for", username);
-    return true;
+    // update status UI
+    statusEl && (statusEl.textContent = modeText(_currentMode));
+    console.log('Stream attached, mode=', _currentMode);
+    return _currentStream;
   } catch (err) {
-    console.error("startExamStream failed during signaling:", err);
-    // cleanup on error
-    try {
-      if (window._userSignaling) {
-        try { window._userSignaling.unsubAnswerDoc && window._userSignaling.unsubAnswerDoc(); } catch(e){}
-        try { window._userSignaling.unsubAnswerCandidates && window._userSignaling.unsubAnswerCandidates(); } catch(e){}
-        window._userSignaling = null;
-      }
-      if (pc) { pc.close(); window._userPC = null; }
-      if (previewEl) { previewEl.srcObject = null; }
-      stream.getTracks().forEach(t => { try { t.stop(); } catch(e){} });
-    } catch(e){}
-    return false;
+    console.error('Failed to start stream', err);
+    statusEl && (statusEl.textContent = 'Mode: error — see console');
+    throw err;
   }
 }
+
+// ===== Wire up UI buttons (no username required; use EXAM.state.username if available) =====
+(function wireStreamControls() {
+  const btnCamera = document.getElementById('btnCamera');
+  const btnScreen = document.getElementById('btnScreen');
+  const statusEl = document.getElementById('streamStatus');
+
+  const username = (typeof EXAM !== 'undefined' && EXAM?.state?.username) ? EXAM.state.username : null;
+
+  if (btnCamera) {
+    btnCamera.addEventListener('click', async () => {
+      _currentMode = 'camera';
+      try {
+        await startExamStream(username, { preferScreen: false });
+        statusEl && (statusEl.textContent = `Mode: camera`);
+      } catch (e) {
+        console.warn('camera start failed', e);
+      }
+    });
+  }
+
+  if (btnScreen) {
+    btnScreen.addEventListener('click', async () => {
+      _currentMode = 'screen';
+      try {
+        await startExamStream(username, { preferScreen: true });
+        statusEl && (statusEl.textContent = `Mode: screen`);
+      } catch (e) {
+        console.warn('screen start failed, falling back to camera', e);
+        // fallback attempt is already inside startExamStream, but you can try camera explicitly
+        try { await startExamStream(username, { preferScreen: false }); } catch (e2) { console.error('fallback camera failed', e2); }
+      }
+    });
+  }
+
+  // Optionally auto-start camera when page loads:
+  // startExamStream(username, { preferScreen: false }).catch(e=>console.warn('autostart failed', e));
+})();
+
 // Stop/cleanup helper (complements the above)
 async function stopExamStream() {
   try {
@@ -4147,3 +4131,4 @@ async function viewUserScreen(username) {
   document.getElementById("streamUserLabel").textContent = username;
   document.getElementById("streamViewer").classList.remove("hidden");
 }
+
