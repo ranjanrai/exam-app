@@ -190,11 +190,13 @@ min-height:80px
   }
 }
 #remoteVideo {
-  display: none;   /* ✅ hidden by default */
-  background: black;
-  border: 2px solid var(--brand);
-  width: 320px;
-  height: 240px;
+  width: 160px !important;
+  height: 120px !important;
+  max-height: none;
+  display: block;
+  background: #000;
+  border-radius: 8px;
+  object-fit: cover;
 }
 
 /* Home camera preview */
@@ -217,5 +219,6 @@ min-height:80px
   background: #000;
   object-fit: contain;
 }
+
 
 
