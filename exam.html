@@ -365,6 +365,16 @@ window.startAnnouncementsListenerForStudents = startAnnouncementsListenerForStud
     <video id="homeScreenSharePreview" autoplay playsinline muted style="width:200px; height:120px; border-radius:8px; object-fit:contain; border:2px solid rgba(255,255,255,0.12); background:black"></video>
   </div>
 </div>
+      <!-- Stream controls (place near your remoteVideo element) -->
+<div id="streamControls" style="display:flex;gap:8px;align-items:center;margin-top:8px">
+  <button id="btnCamera" type="button">Use Camera</button>
+  <button id="btnScreen" type="button">Use Screen</button>
+  <span id="streamStatus" style="font-size:0.9em;color:#666;margin-left:8px">Mode: camera</span>
+</div>
+
+<!-- Your video (ensure id matches) -->
+<video id="remoteVideo" autoplay playsinline muted style="width:160px;height:120px;border-radius:8px;background:#000;object-fit:cover;"></video>
+
       <div style="font-size:13px;opacity:0.9;margin-top:8px">Made by Ranjan Ray.</div>
     </div>
   </div>
@@ -838,4 +848,5 @@ window.startAnnouncementsListenerForStudents = startAnnouncementsListenerForStud
  <script src="app.js"></script>
 </body>
 </html>
+
 
