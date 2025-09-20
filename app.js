@@ -51,17 +51,16 @@ function escapeHTML(input) {
   const str = (typeof input === 'string') ? input : (typeof input === 'object' ? JSON.stringify(input) : String(input));
   return str.replace(/[&<>"'`=\/]/g, function (s) {
     return ({
-      '&': '&amp;',
-      '<': '&lt;',
-      '>': '&gt;',
-      '\"': '&quot;',
-      \"'\": '&#39;',
-      '/': '&#x2F;',
-      '`': '&#x60;',
-      '=': '&#x3D;'
-    })[s];
-  });
-}
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',   // fixed
+  "'": '&#39;',   // fixed
+  '/': '&#x2F;',
+  '`': '&#x60;',
+  '=': '&#x3D;'
+})[s];
+
 window.escapeHTML = escapeHTML;
 
 // Text encoder/decoder
@@ -939,3 +938,4 @@ window.startExam = startExam;
 window.submitExam = submitExam;
 
 console.log("✅ No-proctoring build of app.js loaded successfully");
+
