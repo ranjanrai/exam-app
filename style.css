@@ -1,4 +1,4 @@
-﻿#fsQuestion div {
+#fsQuestion div {
   margin: 0;     /* remove default div margins */
   padding: 0;    /* no extra space */
 }
@@ -190,13 +190,11 @@ min-height:80px
   }
 }
 #remoteVideo {
-  width: 160px !important;
-  height: 120px !important;
-  max-height: none;
-  display: block;
-  background: #000;
-  border-radius: 8px;
-  object-fit: cover;
+  display: none;   /* ✅ hidden by default */
+  background: black;
+  border: 2px solid var(--brand);
+  width: 320px;
+  height: 240px;
 }
 
 /* Home camera preview */
@@ -219,6 +217,3 @@ min-height:80px
   background: #000;
   object-fit: contain;
 }
-
-
-
