@@ -189,31 +189,3 @@ min-height:80px
     padding: 0;
   }
 }
-#remoteVideo {
-  display: none;   /* ✅ hidden by default */
-  background: black;
-  border: 2px solid var(--brand);
-  width: 320px;
-  height: 240px;
-}
-
-/* Home camera preview */
-#homeCameraPreview { 
-  width: 160px;
-  height: 120px;
-  border-radius: 8px;
-  object-fit: cover;
-  border: 2px solid rgba(255,255,255,0.12);
-  background: #000;
-}
-#homeCameraWrap .btn { font-weight:700; }
-
-
-#homeScreenSharePreview {
-  width: 200px;
-  height: 120px;
-  border-radius: 8px;
-  border: 2px solid rgba(255,255,255,0.12);
-  background: #000;
-  object-fit: contain;
-}
