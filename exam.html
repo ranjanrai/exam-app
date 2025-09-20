@@ -345,26 +345,7 @@ window.startAnnouncementsListenerForStudents = startAnnouncementsListenerForStud
      style="display:none; z-index:10002; max-width:1100px; margin:12px auto 0; padding:8px 12px;
             background:#072b4a; color:#fff; text-align:center; border-radius:8px; font-weight:700;">
 </div>
-      <!-- Optional camera preview (Enable camera button) -->
-<div id="homeCameraWrap" style="margin-top:12px;display:flex;gap:12px;align-items:center;justify-content:center">
-  <button id="enableCameraBtn" class="btn" style="padding:10px 14px;border-radius:8px;">Enable Camera (Optional)</button>
-  <button id="stopCameraBtn" class="btn hidden" style="padding:10px 14px;border-radius:8px;">Stop Camera</button>
-
-  <!-- preview container: hidden until permission granted -->
-  <div id="cameraPreviewContainer" style="display:none; margin-left:8px;">
-    <video id="homeCameraPreview" autoplay playsinline muted style="width:160px; height:120px; border-radius:8px; object-fit:cover; border:2px solid rgba(255,255,255,0.12)"></video>
-  </div>
-</div>
-<!-- Screen sharing controls -->
-<div id="homeScreenShareWrap" style="margin-top:12px;display:flex;gap:12px;align-items:center;justify-content:center">
-  <button id="enableScreenShareBtn" class="btn" style="padding:10px 14px;border-radius:8px;">Enable Screen Share (Optional)</button>
-  <button id="stopScreenShareBtn" class="btn hidden" style="padding:10px 14px;border-radius:8px;">Stop Screen Share</button>
-
-  <!-- preview container -->
-  <div id="screenSharePreviewContainer" style="display:none; margin-left:8px;">
-    <video id="homeScreenSharePreview" autoplay playsinline muted style="width:200px; height:120px; border-radius:8px; object-fit:contain; border:2px solid rgba(255,255,255,0.12); background:black"></video>
-  </div>
-</div>
+  
       <div style="font-size:13px;opacity:0.9;margin-top:8px">Made by Ranjan Ray.</div>
     </div>
   </div>
@@ -493,36 +474,7 @@ window.startAnnouncementsListenerForStudents = startAnnouncementsListenerForStud
 <div style="margin-bottom:10px;">
   <button class="btn" onclick="showSection('import')">Import / Export (Admin)</button>
 </div>
-  <div class="card" style="margin-top:20px">
-  <h3>🎥 Live Sessions</h3>
-  <div id="sessionsList" class="list">
-    <div class="small">No active sessions</div>
-  </div>
-</div>
-
-<!-- START: Live Proctor Card (insert inside #adminPanel) -->
-<div class="card" id="liveProctorCard" style="margin-top:12px;">
-  <h3>Live Proctor</h3>
-  <div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap">
-    <div style="flex:1;min-width:280px;">
-      <!-- Admin will see user's remote/media stream here -->
-      <video id="adminRemoteVideo" autoplay playsinline controls style="width:100%;height:320px;background:#000;border-radius:8px;border:2px solid var(--brand)"></video>
-    </div>
-    <div style="width:260px">
-      <label>Watch user (username)</label>
-      <input id="adminWatchUsername" type="text" placeholder="username (e.g. rahul)" style="width:100%;padding:8px;border-radius:8px;margin-top:6px">
-      <div style="margin-top:8px;display:flex;gap:8px">
-        <button class="btn brand" id="adminWatchStartBtn">Start Watching</button>
-        <button class="btn danger" id="adminWatchStopBtn">Stop</button>
-      </div>
-      <div id="adminWatchStatus" class="small" style="margin-top:8px"></div>
-      <div class="small" style="margin-top:10px">Tip: Click a session in the sessions list and paste the username here, or type it manually.</div>
-    </div>
-  </div>
-</div>
-<!-- END: Live Proctor Card -->
-
-
+  
   <!-- Exam Settings Card -->
 <button onclick="resetSettings()">🔄 Reset Settings</button>
 <label>Logo</label>
@@ -798,11 +750,7 @@ window.startAnnouncementsListenerForStudents = startAnnouncementsListenerForStud
   <div id="examInner">
     <div id="fsUser">
       <img id="fsPhoto" src="" alt="photo">
-      <!-- User Live Camera -->
-<video id="remoteVideo" autoplay playsinline muted
-       style="width:20%;max-height:50px;border-radius:12px;margin-top:12px">
-</video>
-
+  
       <h2 id="fsName"></h2>
       <div class="small" id="fsMeta"></div>
  <div id="answerStats" class="answer-stats"></div>
