@@ -451,46 +451,7 @@ async function startExam(user) {
   $('#examFullscreen').style.display = 'flex';
   $('#fsPhoto').src = user.photo || '';
   $('#fsName').textContent = user.fullName || user.username;
-
   paintQuestion();
-
-  // --- Attach the home camera stream into the exam UI if available ---
-  try {
-    let examCam = document.getElementById('examCameraPreview');
-    if (!examCam) {
-      const fsUser = document.getElementById('fsUser');
-      examCam = document.createElement('video');
-      examCam.id = 'examCameraPreview';
-      examCam.autoplay = true;
-      examCam.playsInline = true;
-      examCam.muted = true; // prevent echo/auto-play policy issues
-      examCam.style.width = '120px';
-      examCam.style.height = '120px';
-      examCam.style.objectFit = 'cover';
-      examCam.style.borderRadius = '8px';
-      examCam.style.marginTop = '8px';
-      if (fsUser) fsUser.appendChild(examCam);
-      else document.getElementById('examInner').appendChild(examCam);
-    }
-
-    if (window._homeCameraStream) {
-      try {
-        examCam.srcObject = window._homeCameraStream;
-      } catch (e) {
-        examCam.src = URL.createObjectURL(window._homeCameraStream);
-      }
-      examCam.style.display = 'block';
-    } else {
-      examCam.style.display = 'none';
-    }
-  } catch (e) {
-    console.warn('Could not attach camera stream to exam UI', e);
-  }
-
-  if (screenShareEnabled) {
-    startExamStream(user.username);
-  }
-
   startTimer();
   await saveSessionToFirestore(user.username, EXAM.state, EXAM.paper);
   startPeriodicSessionSave();
@@ -3984,4 +3945,5 @@ async function viewUserScreen(username) {
   document.getElementById("streamUserLabel").textContent = username;
   document.getElementById("streamViewer").classList.remove("hidden");
 }
+
 
