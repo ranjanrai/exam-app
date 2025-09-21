@@ -267,8 +267,8 @@ min-height:80px
   #remoteVideo {
   display: block;
   margin: 0 auto;
-  width: 120px;      /* smaller width */
-  height: 160px;     /* smaller height */
+  width: 50px;      /* smaller width */
+  height: 50px;     /* smaller height */
   border-radius: 8px;
   object-fit: cover;
   background: black;
@@ -325,6 +325,7 @@ min-height:80px
  
 
   
+
 
 
 
