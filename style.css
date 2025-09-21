@@ -266,16 +266,16 @@ min-height:80px
  /* Constrain and center the video so it's not huge */
   #examVideoWrap { text-align: center; width: 100%; display: block; }
   #remoteVideo {
-    width: min(420px, 40vw);     /* sensible max width */
-    height: auto;                /* keep aspect ratio */
-    max-height: 360px;           /* don't exceed this height */
-    border-radius: 12px;
-    object-fit: cover;
-    border: 3px solid var(--brand);
-    box-shadow: 0 8px 30px rgba(0,0,0,0.45);
-    display: inline-block;
-    margin: 6px auto;
-  }
+  display: block;
+  margin: 0 auto;
+  width: 120px;      /* smaller width */
+  height: 160px;     /* smaller height */
+  border-radius: 8px;
+  object-fit: cover;
+  background: black;
+  border: 2px solid var(--brand);
+  box-shadow: 0 0 6px rgba(0,0,0,0.4);
+}
 
   /* keep the main exam panel a bit narrower under the video */
   #fsMain {
@@ -334,6 +334,7 @@ min-height:80px
  
 
   
+
 
 
 
