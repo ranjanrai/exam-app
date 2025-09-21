@@ -263,18 +263,25 @@ min-height:80px
   outline: 3px solid rgba(96,165,250,0.35);
   outline-offset: 2px;
 }
-
-  #remoteVideo {
-  display: block;
-  margin: 0 auto;
-  width: 50px;      /* smaller width */
-  height: 50px;     /* smaller height */
+/* Default webcam size (desktop) */
+#remoteVideo {
+  width: 140px;       /* smaller width */
+  height: 105px;      /* keep 4:3 ratio */
   border-radius: 8px;
   object-fit: cover;
   background: black;
   border: 2px solid var(--brand);
   box-shadow: 0 0 6px rgba(0,0,0,0.4);
 }
+
+/* On smaller screens (like phones), shrink further */
+@media (max-width: 768px) {
+  #remoteVideo {
+    width: 100px;
+    height: 75px;
+  }
+}
+
   
 /* Home camera preview */
 #homeCameraPreview { 
@@ -298,6 +305,7 @@ min-height:80px
 }
 
   
+
 
 
 
