@@ -204,8 +204,8 @@ min-height:80px
   display: none;   /* ✅ hidden by default */
   background: black;
   border: 2px solid var(--brand);
-  width: 320px;    /* optional: fixed size */
-  height: 240px;   /* optional: fixed size */
+  width: 50px;    /* optional: fixed size */
+  height: 50px;   /* optional: fixed size */
 }
 
 /* Home camera preview */
@@ -228,6 +228,7 @@ min-height:80px
   background: #000;
   object-fit: contain;
 }
+
 
 
 
