@@ -3839,34 +3839,33 @@ function hideVisitorMessage() {
 // Start Exam Stream (combined: reuse preview + WebRTC signaling)
 // --------------------
 async function startExamStream(username) {
-  // ✅ Declare once
-  let stream = null;
-  let usedScreen = false;
+ let stream = null;
+let usedScreen = false;
 
-  // ✅ Reuse home preview stream if present (so home preview becomes exam stream)
-  if (window._homeCameraStream && window._homeCameraStream.getTracks().length) {
-    stream = window._homeCameraStream;
-    usedScreen = false;
-    console.log("✔️ Reusing existing home camera stream for exam.");
-  } else {
-    // ✅ Otherwise try screen share, then camera
+// 1. Reuse home camera if available
+if (window._homeCameraStream && window._homeCameraStream.getTracks().length) {
+  stream = window._homeCameraStream;
+  console.log("✔️ Reusing existing home camera stream for exam.");
+} else {
+  try {
+    // 2. Try webcam
+    stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+    console.log("✔️ Using camera for stream");
+  } catch (errCam) {
+    console.warn("Camera failed, trying screen share:", errCam);
     try {
+      // 3. Fallback: screen share
       stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
       usedScreen = true;
       console.log("✔️ Using screen share for stream");
-    } catch (err) {
-      console.warn("Screen share failed / denied — falling back to camera:", err);
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-        usedScreen = false;
-        console.log("✔️ Using camera for stream");
-      } catch (err2) {
-        console.error("❌ Failed to acquire any media:", err2);
-        alert("Unable to access screen or camera. Please allow permission and try again.");
-        return false;
-      }
+    } catch (errScreen) {
+      console.error("❌ Failed to acquire any media:", errScreen);
+      alert("Unable to access camera or screen. Please allow permission and try again.");
+      return false;
     }
   }
+}
+
 
   // Safety: ensure we have a stream
   if (!stream) {
@@ -4088,6 +4087,7 @@ async function viewUserScreen(username) {
   document.getElementById("streamUserLabel").textContent = username;
   document.getElementById("streamViewer").classList.remove("hidden");
 }
+
 
 
 
