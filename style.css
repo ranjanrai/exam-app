@@ -295,36 +295,48 @@ min-height:80px
   object-fit: contain;
 }
 
-/* Limit exam video size on desktop */
+/* Passport style video box */
 #remoteVideo {
-  width: 240px;         /* fixed width */
-  height: 180px;        /* fixed height */
-  max-width: 100%;      /* keep responsive */
-  max-height: 200px;
-  border-radius: 8px;
-  object-fit: cover;
+  width: 180px;         /* passport-like width */
+  height: 240px;        /* taller height */
+  max-width: 100%;
+  border-radius: 12px;
+  object-fit: cover;    /* crop nicely */
   background: black;
-  border: 2px solid var(--brand);
-  margin: 0 auto;       /* center inside column */
+  border: 3px solid var(--brand);
+  display: block;
+  margin: 0 auto;       /* center horizontally */
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4); /* subtle shadow */
 }
 
-/* smaller user image/video container */
+/* User column with video on top, centered horizontally */
 #fsUser {
-  flex: 0 0 260px;   /* narrower column */
+  flex: 0 0 220px;          /* column width */
+  display: flex;
+  flex-direction: column;
+  align-items: center;      /* center horizontally */
+  justify-content: flex-start; /* stick to top */
+  gap: 12px;
   text-align: center;
+  padding-top: 12px;        /* space from top */
 }
 
-/* on very small screens, let it expand */
+/* On mobile, keep portrait ratio but scale down */
 @media (max-width: 600px) {
   #remoteVideo {
-    width: 100%;
+    width: 50%;            /* half screen width */
     height: auto;
-    max-height: 30vh;
+    aspect-ratio: 3/4;     /* maintain portrait ratio */
+    max-height: 40vh;
   }
   #fsUser {
     flex: 1 1 auto;
+    justify-content: flex-start;
+    padding-top: 8px;
   }
 }
+
+
 
 
 
