@@ -183,6 +183,7 @@ min-height:80px
 
 #questionNav {
   display: flex;
+  overflow-y: auto; 
   flex-wrap: wrap;       /* allow wrapping */
   gap: 6px;              /* spacing between buttons */
   padding: 8px 4px;
@@ -197,6 +198,7 @@ min-height:80px
   text-align: center;
   border-radius: 6px;
 }
+
 
 #remoteVideo {
   display: none;   /* ✅ hidden by default */
@@ -227,38 +229,6 @@ min-height:80px
   object-fit: contain;
 }
 
-#examFullscreen {
-  display: flex;
-  flex-direction: column;
-}
 
-#examInner {
-  display: flex;
-  flex-direction: row;
-  height: 100%;
-  max-height: 100%;   /* ✅ allow full height */
-}
-
-#fsMain {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;      /* ✅ required for proper flex scrolling */
-  max-height: 100%;   /* remove hard cap */
-}
-
-#fsScrollArea {
-  flex: 1;
-  overflow-y: auto;   /* ✅ only this area scrolls */
-  min-height: 0;
-}
-
-.fsFooter {
-  position: sticky;
-  bottom: 0;
-  background: #07182a;
-  padding: 10px;
-  z-index: 10;
-}
 
 
