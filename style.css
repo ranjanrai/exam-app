@@ -198,6 +198,71 @@ min-height:80px
   text-align: center;
   border-radius: 6px;
 }
+/* Responsive Question Nav (supports any number of questions) */
+
+#questionNav {
+  display: grid;
+  gap: 8px;
+  align-items: center;
+  justify-items: center;
+
+  /* Auto-fill columns with a minimum button size.
+     Each cell will be at least 48px wide and can grow up to 1fr. */
+  grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));
+
+  /* Prevent nav growing too tall and force internal scrolling when needed */
+  max-height: 40vh;          /* adjust if you want less/more */
+  overflow: auto;            /* scroll when too many buttons */
+
+  padding: 8px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* individual number button */
+#questionNav .qbtn {
+  min-width: 48px;
+  height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  border: none;
+  background: #f3f7fb;    /* change to your style */
+  color: #06202b;
+  font-weight: 700;
+  cursor: pointer;
+  user-select: none;
+}
+
+/* answered / flagged / current states - tweak colors as needed */
+#questionNav .qbtn.answered { background: #34d399; color: #032014; }
+#questionNav .qbtn.flagged  { outline: 2px dashed #f59e0b; }
+#questionNav .qbtn.current  { box-shadow: 0 0 0 3px rgba(96,165,250,0.18); }
+
+/* Make nav behave as a single horizontal row on very small widths */
+@media (max-width: 520px) {
+  #questionNav {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 8px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 10px;
+  }
+  #questionNav .qbtn {
+    min-width: 44px;
+    height: 44px;
+    flex: 0 0 auto;
+  }
+}
+
+/* Accessibility focus style */
+#questionNav .qbtn:focus {
+  outline: 3px solid rgba(96,165,250,0.35);
+  outline-offset: 2px;
+}
 
 
 #remoteVideo {
@@ -228,6 +293,7 @@ min-height:80px
   background: #000;
   object-fit: contain;
 }
+
 
 
 
