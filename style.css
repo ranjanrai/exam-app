@@ -297,27 +297,8 @@ min-height:80px
   object-fit: contain;
 }
 
-
-/* Position live camera on the left */
-#examVideoWrap {
-  position: absolute;
-  top: 90px;        /* adjust so it clears the banner/header */
-  left: 20px;       /* stick to left */
-  z-index: 1200;
-}
-
-/* Force smaller webcam size */
-#remoteVideo {
-  width: 160px !important;
-  height: 120px !important;
-  border-radius: 8px;
-  object-fit: cover;
-  background: #000;
-  border: 2px solid var(--brand);
-  box-shadow: 0 0 6px rgba(0,0,0,0.45);
-}
-
   
+
 
 
 
