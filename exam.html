@@ -352,7 +352,10 @@ window.startAnnouncementsListenerForStudents = startAnnouncementsListenerForStud
 
   <!-- preview container: hidden until permission granted -->
   <div id="cameraPreviewContainer" style="display:none; margin-left:8px;">
-    <video id="homeCameraPreview" autoplay playsinline muted style="width:160px; height:120px; border-radius:8px; object-fit:cover; border:2px solid rgba(255,255,255,0.12)"></video>
+    <video id="homeCameraPreview" autoplay playsinline muted
+       disablepictureinpicture controlslist="nodownload noremoteplayback"
+       style="width:160px; height:120px; border-radius:8px; object-fit:cover; border:2px solid rgba(255,255,255,0.12)"></video>
+
   </div>
 </div>
 <!-- Screen sharing controls -->
@@ -362,7 +365,10 @@ window.startAnnouncementsListenerForStudents = startAnnouncementsListenerForStud
 
   <!-- preview container -->
   <div id="screenSharePreviewContainer" style="display:none; margin-left:8px;">
-    <video id="homeScreenSharePreview" autoplay playsinline muted style="width:200px; height:120px; border-radius:8px; object-fit:contain; border:2px solid rgba(255,255,255,0.12); background:black"></video>
+    <video id="homeScreenSharePreview" autoplay playsinline muted
+       disablepictureinpicture controlslist="nodownload noremoteplayback"
+       style="width:200px; height:120px; border-radius:8px; object-fit:contain; border:2px solid rgba(255,255,255,0.12); background:black"></video>
+
   </div>
 </div>
       <div style="font-size:13px;opacity:0.9;margin-top:8px">Made by Ranjan Ray.</div>
@@ -799,7 +805,8 @@ window.startAnnouncementsListenerForStudents = startAnnouncementsListenerForStud
     <div id="fsUser">
       <img id="fsPhoto" src="" alt="photo">
       <div id="examVideoWrap" style="margin-top:12px; text-align:center;">
-  <video id="remoteVideo" autoplay playsinline muted></video>
+ <video id="remoteVideo" autoplay playsinline muted 
+       disablepictureinpicture controlslist="nodownload noremoteplayback"></video>
 </div>
 
       <h2 id="fsName"></h2>
@@ -834,5 +841,6 @@ window.startAnnouncementsListenerForStudents = startAnnouncementsListenerForStud
  <script src="app.js"></script>
 </body>
 </html>
+
 
 
