@@ -295,6 +295,37 @@ min-height:80px
   object-fit: contain;
 }
 
+/* Limit exam video size on desktop */
+#remoteVideo {
+  width: 240px;         /* fixed width */
+  height: 180px;        /* fixed height */
+  max-width: 100%;      /* keep responsive */
+  max-height: 200px;
+  border-radius: 8px;
+  object-fit: cover;
+  background: black;
+  border: 2px solid var(--brand);
+  margin: 0 auto;       /* center inside column */
+}
+
+/* smaller user image/video container */
+#fsUser {
+  flex: 0 0 260px;   /* narrower column */
+  text-align: center;
+}
+
+/* on very small screens, let it expand */
+@media (max-width: 600px) {
+  #remoteVideo {
+    width: 100%;
+    height: auto;
+    max-height: 30vh;
+  }
+  #fsUser {
+    flex: 1 1 auto;
+  }
+}
+
 
 
 
