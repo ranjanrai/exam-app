@@ -263,7 +263,18 @@ min-height:80px
   outline: 3px solid rgba(96,165,250,0.35);
   outline-offset: 2px;
 }
-
+#remoteVideo {
+  display: block;
+  margin: 0 auto;          /* center horizontally */
+  width: 160px;            /* passport width */
+  height: 220px;           /* passport height */
+  border-radius: 10px;
+  object-fit: cover;       /* crop neatly */
+  background: black;
+  border: 3px solid var(--brand);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+}
+  
 /* Home camera preview */
 #homeCameraPreview { 
   width: 160px;
@@ -285,44 +296,7 @@ min-height:80px
   object-fit: contain;
 }
 
-/* Passport style video box */
-#remoteVideo {
-  display: block;
-  margin: 0 auto;          /* center horizontally */
-  width: 160px;            /* passport width */
-  height: 220px;           /* passport height */
-  border-radius: 10px;
-  object-fit: cover;       /* crop neatly */
-  background: black;
-  border: 3px solid var(--brand);
-  box-shadow: 0 4px 14px rgba(0,0,0,0.35);
-}
 
-/* User info column */
-#fsUser {
-  flex: 0 0 200px;         /* narrower column */
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start; /* keep video at top */
-  padding-top: 10px;
-  gap: 10px;
-  text-align: center;
-}
-
-/* On small screens, keep ratio but scale down */
-@media (max-width: 600px) {
-  #remoteVideo {
-    width: 50%;            /* half width on mobile */
-    height: auto;
-    aspect-ratio: 3/4;     /* passport aspect ratio */
-    max-height: 35vh;
-  }
-  #fsUser {
-    flex: 1 1 auto;
-    padding-top: 8px;
-  }
-}
 
 
 
