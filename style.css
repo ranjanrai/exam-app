@@ -297,44 +297,44 @@ min-height:80px
 
 /* Passport style video box */
 #remoteVideo {
-  width: 180px;         /* passport-like width */
-  height: 240px;        /* taller height */
-  max-width: 100%;
-  border-radius: 12px;
-  object-fit: cover;    /* crop nicely */
+  display: block;
+  margin: 0 auto;          /* center horizontally */
+  width: 160px;            /* passport width */
+  height: 220px;           /* passport height */
+  border-radius: 10px;
+  object-fit: cover;       /* crop neatly */
   background: black;
   border: 3px solid var(--brand);
-  display: block;
-  margin: 0 auto;       /* center horizontally */
-  box-shadow: 0 4px 20px rgba(0,0,0,0.4); /* subtle shadow */
+  box-shadow: 0 4px 14px rgba(0,0,0,0.35);
 }
 
-/* User column with video on top, centered horizontally */
+/* User info column */
 #fsUser {
-  flex: 0 0 220px;          /* column width */
+  flex: 0 0 200px;         /* narrower column */
   display: flex;
   flex-direction: column;
-  align-items: center;      /* center horizontally */
-  justify-content: flex-start; /* stick to top */
-  gap: 12px;
+  align-items: center;
+  justify-content: flex-start; /* keep video at top */
+  padding-top: 10px;
+  gap: 10px;
   text-align: center;
-  padding-top: 12px;        /* space from top */
 }
 
-/* On mobile, keep portrait ratio but scale down */
+/* On small screens, keep ratio but scale down */
 @media (max-width: 600px) {
   #remoteVideo {
-    width: 50%;            /* half screen width */
+    width: 50%;            /* half width on mobile */
     height: auto;
-    aspect-ratio: 3/4;     /* maintain portrait ratio */
-    max-height: 40vh;
+    aspect-ratio: 3/4;     /* passport aspect ratio */
+    max-height: 35vh;
   }
   #fsUser {
     flex: 1 1 auto;
-    justify-content: flex-start;
     padding-top: 8px;
   }
 }
+
+
 
 
 
