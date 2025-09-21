@@ -3834,87 +3834,75 @@ function hideVisitorMessage() {
 
 /* ---------------- HYBRID EXAM STREAMING ---------------- */
 
-// Hybrid startExamStream: try screen share then camera, publish offer + ICE to screenSignals/{username}
+// --------------------
+// Start Exam Stream
+// --------------------
+// --------------------
+// Start Exam Stream (combined: reuse preview + WebRTC signaling)
+// --------------------
 async function startExamStream(username) {
-  // inside startExamStream, before trying getDisplayMedia()
-let stream = null;
-let usedScreen = false;
-
-// reuse home preview stream if present (so home preview becomes exam stream)
-if (window._homeCameraStream && window._homeCameraStream.getTracks().length) {
-  stream = window._homeCameraStream;
-  usedScreen = false;
-  console.log("✔️ Reusing existing home camera stream for exam.");
-} else {
-  // existing code: try displayMedia then getUserMedia
-  try {
-    stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
-    usedScreen = true;
-    console.log("✔️ Using screen share for stream");
-  } catch (err) {
-    console.warn("Screen share failed / denied — falling back to camera:", err);
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-      usedScreen = false;
-      console.log("✔️ Using camera for stream");
-    } catch (err2) {
-      console.error("❌ Failed to acquire any media:", err2);
-      alert("Unable to access screen or camera. Please allow permission and try again.");
-      return false;
-    }
-  }
-}
-
-  if (!username) {
-    console.warn("startExamStream: missing username");
-    return false;
-  }
-  
-
-  // cleanup any previous stream/pc
-  try { await stopExamStream(); } catch(e){}
-
-  const RTC_CONFIG = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
-
+  // ✅ Declare once
   let stream = null;
   let usedScreen = false;
-  try {
-    // try screen share first
-    stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
-    usedScreen = true;
-    console.log("✔️ Using screen share for stream");
-  } catch (err) {
-    console.warn("Screen share failed / denied — falling back to camera:", err);
+
+  // ✅ Reuse home preview stream if present (so home preview becomes exam stream)
+  if (window._homeCameraStream && window._homeCameraStream.getTracks().length) {
+    stream = window._homeCameraStream;
+    usedScreen = false;
+    console.log("✔️ Reusing existing home camera stream for exam.");
+  } else {
+    // ✅ Otherwise try screen share, then camera
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-      usedScreen = false;
-      console.log("✔️ Using camera for stream");
-    } catch (err2) {
-      console.error("❌ Failed to acquire any media:", err2);
-      alert("Unable to access screen or camera. Please allow permission and try again.");
-      return false;
+      stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+      usedScreen = true;
+      console.log("✔️ Using screen share for stream");
+    } catch (err) {
+      console.warn("Screen share failed / denied — falling back to camera:", err);
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        usedScreen = false;
+        console.log("✔️ Using camera for stream");
+      } catch (err2) {
+        console.error("❌ Failed to acquire any media:", err2);
+        alert("Unable to access screen or camera. Please allow permission and try again.");
+        return false;
+      }
     }
   }
 
-  // show local preview in user's UI (muted)
- const previewEl = document.getElementById("remoteVideo");
-if (previewEl) {
-  previewEl.srcObject = stream;
-  previewEl.muted = true;
-  try { await previewEl.play(); } catch(e) {}
-  previewEl.style.display = "block";   // ✅ show only when stream works
-}
+  // Safety: ensure we have a stream
+  if (!stream) {
+    console.error("startExamStream: no media stream available.");
+    alert("No media stream available.");
+    return false;
+  }
 
+  // ✅ Attach stream to video element in exam UI
+  const previewEl = document.getElementById("remoteVideo");
+  if (previewEl) {
+    try {
+      previewEl.srcObject = stream;
+      previewEl.style.display = "block";
+      // autoplay may be blocked until user gesture; catch errors
+      previewEl.play().catch(err => console.warn("Preview play() failed", err));
+    } catch (e) {
+      console.warn("Failed to attach preview element:", e);
+    }
+  }
 
+  // ---------- WebRTC / Firestore signaling ----------
   // build peer connection
-  const pc = new RTCPeerConnection(RTC_CONFIG);
+  const pc = new RTCPeerConnection(window.RTC_CONFIG || {});
   window._userPC = pc; // keep reference for later cleanup
 
   // add tracks
-  stream.getTracks().forEach(track => pc.addTrack(track, stream));
+  try {
+    stream.getTracks().forEach(track => pc.addTrack(track, stream));
+  } catch (e) {
+    console.warn("Failed to add tracks to PC:", e);
+  }
 
   // Firestore signaling locations
-  // collection(db, "screenSignals") -> doc(username) -> subcollections offerCandidates / answerCandidates
   const callDoc = doc(collection(db, "screenSignals"), username);
   const offerCandidatesCol = collection(callDoc, "offerCandidates");
   const answerCandidatesCol = collection(callDoc, "answerCandidates");
@@ -3937,8 +3925,8 @@ if (previewEl) {
     console.log("PC state:", pc.connectionState);
   };
 
+  // Create offer, publish, listen for answer & remote ICE
   try {
-    // create offer and set local description
     const offerDescription = await pc.createOffer();
     await pc.setLocalDescription(offerDescription);
 
@@ -3960,7 +3948,6 @@ if (previewEl) {
       if (!data) return;
       if (data.answer && pc && pc.signalingState !== "closed") {
         try {
-          // avoid resetting if already set to same SDP
           const answer = data.answer;
           if (!pc.currentRemoteDescription || pc.currentRemoteDescription.sdp !== answer.sdp) {
             const answerDesc = new RTCSessionDescription({ type: answer.type, sdp: answer.sdp });
@@ -4012,12 +3999,13 @@ if (previewEl) {
         window._userSignaling = null;
       }
       if (pc) { pc.close(); window._userPC = null; }
-      if (previewEl) { previewEl.srcObject = null; }
-      stream.getTracks().forEach(t => { try { t.stop(); } catch(e){} });
+      if (previewEl) { try { previewEl.srcObject = null; } catch(e){} }
+      try { stream.getTracks().forEach(t => { try { t.stop(); } catch(e){} }); } catch(e){}
     } catch(e){}
     return false;
   }
 }
+
 // Stop/cleanup helper (complements the above)
 async function stopExamStream() {
   try {
@@ -4102,5 +4090,6 @@ async function viewUserScreen(username) {
   document.getElementById("streamUserLabel").textContent = username;
   document.getElementById("streamViewer").classList.remove("hidden");
 }
+
 
 
