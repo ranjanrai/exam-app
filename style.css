@@ -297,33 +297,11 @@ min-height:80px
   object-fit: contain;
 }
 
-  /* ---------- Center the camera preview at top for desktop ---------- */
-/* Add this at the end of style.css */
-
-@media (min-width: 900px) {
-  /* Put the user/video block above main content and center it */
-  #examInner {
-    flex-direction: column;      /* stack user block above main panel */
-    align-items: center;         /* center horizontally */
-    gap: 18px;                   /* space between video and panel */
-    padding-top: 20px;
-  }
-
-  /* Make the fsUser stretch full-width (so it sits above) and center its contents */
-  #fsUser {
-    flex: 0 0 auto;
-    width: 100%;
-    max-width: 1100px;           /* keep it aligned with #examInner max width */
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-    margin: 0 auto;
-  }
 
  
 
   
+
 
 
 
