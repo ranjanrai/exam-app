@@ -802,21 +802,24 @@ window.startAnnouncementsListenerForStudents = startAnnouncementsListenerForStud
 </div>
 
   <div id="examInner">
+     <!-- Live camera on the left -->
+  <div id="examVideoWrap">
+    <video id="remoteVideo" autoplay playsinline muted
+           disablepictureinpicture controlslist="nodownload noremoteplayback"></video>
+  </div>
     <div id="fsUser">
-      <img id="fsPhoto" src="" alt="photo">
-      <div id="examVideoWrap" style="margin-top:12px; text-align:center;">
- <video id="remoteVideo" autoplay playsinline muted 
-       disablepictureinpicture controlslist="nodownload noremoteplayback"></video>
-</div>
+    <img id="fsPhoto" src="" alt="photo">
+    <h2 id="fsName"></h2>
+    <div class="small" id="fsMeta"></div>
+    <div id="answerStats" class="answer-stats"></div>
+  </div>
 
-      <h2 id="fsName"></h2>
-      <div class="small" id="fsMeta"></div>
- <div id="answerStats" class="answer-stats"></div>
+  <div id="fsMain">
+    <div id="fsScrollArea">
+      <div id="fsQuestion">Question will appear here</div>
+      <div id="fsOptions"></div>
     </div>
-    <div id="fsMain">
-      <div id="fsScrollArea">
-  <div id="fsQuestion">Question will appear here</div>
-  <div id="fsOptions"></div>
+  </div>
 </div>
 
       <!-- NEW: Direct question navigation -->
@@ -841,6 +844,7 @@ window.startAnnouncementsListenerForStudents = startAnnouncementsListenerForStud
  <script src="app.js"></script>
 </body>
 </html>
+
 
 
 
