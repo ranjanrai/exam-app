@@ -180,24 +180,24 @@ min-height:80px
     gap: 6px;
     padding: 8px 4px;
   }
- /* Scrollable bar for question navigation */
+
 #questionNav {
-  display: flex;               /* horizontal layout */
-  gap: 6px;                    /* spacing between buttons */
-  overflow-x: auto;            /* enable horizontal scroll */
-  white-space: nowrap;         /* prevent wrapping */
+  display: flex;
+  flex-wrap: wrap;       /* allow wrapping */
+  gap: 6px;              /* spacing between buttons */
   padding: 8px 4px;
-  scrollbar-width: thin;       /* Firefox */
+  justify-content: center; /* optional: center align buttons */
 }
 
 #questionNav button {
-  flex: 0 0 auto;              /* don’t shrink */
+  flex: 0 0 auto;
   min-width: 40px;
   height: 40px;
   font-size: 14px;
   text-align: center;
   border-radius: 6px;
 }
+
 #remoteVideo {
   display: none;   /* ✅ hidden by default */
   background: black;
