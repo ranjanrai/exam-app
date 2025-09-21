@@ -270,8 +270,8 @@ document.addEventListener('DOMContentLoaded', ()=> {
     document.getElementById('userName').value = u;
     document.getElementById('userPass').value = p;
 
-    // show user section (so any UI messages appear), then call your existing handler
-    showSection('user');
+  window.keepHomeCamera = true;
+showSection('user');
 
     // call the existing user login handler (if you use the resume version, call that instead)
     if(typeof handleUserLogin === 'function') {
@@ -394,16 +394,17 @@ if (stopSSBtn) stopSSBtn.addEventListener('click', (e)=>{
   stopHomeScreenShare(); 
 });
   
-// Optional: stop camera when user navigates to the user section (so preview doesn't keep running)
+// BEFORE: stops home camera whenever leaving home.
+// AFTER: only stop it if keepHomeCamera flag is falsy.
 const originalShowSection = showSection;
 window.showSection = function(id) {
-  // stop camera if leaving home
-  if (id !== 'home') {
+  // stop camera if leaving home and not explicitly asked to keep it
+  if (id !== 'home' && !window.keepHomeCamera) {
     stopHomeCamera();
   }
-  // call existing showSection (preserve behavior)
   return originalShowSection(id);
 };
+
 
   // Enter key on home password should trigger login
   document.getElementById('homePassword').addEventListener('keydown', (e)=>{ if(e.key === 'Enter') document.getElementById('homeLoginBtn').click(); });
@@ -414,6 +415,7 @@ window.showSection = function(id) {
 let _homeScreenStream = null;
 
 async function startHomeScreenShare() {
+  
   try {
     if (!navigator.mediaDevices || typeof navigator.mediaDevices.getDisplayMedia !== 'function') {
       alert('Screen sharing API not available in this browser.');
@@ -589,6 +591,7 @@ async function startExam(user){
     submitted: false
   };
   EXAM.cur = 0;
+  window.keepHomeCamera = false;
 
   // --- Optional resume logic (only if you WANT it)
   // Add a checkbox in admin to set settings.resumeEnabled if you need this behavior.
@@ -3833,6 +3836,35 @@ function hideVisitorMessage() {
 
 // Hybrid startExamStream: try screen share then camera, publish offer + ICE to screenSignals/{username}
 async function startExamStream(username) {
+  // inside startExamStream, before trying getDisplayMedia()
+let stream = null;
+let usedScreen = false;
+
+// reuse home preview stream if present (so home preview becomes exam stream)
+if (window._homeCameraStream && window._homeCameraStream.getTracks().length) {
+  stream = window._homeCameraStream;
+  usedScreen = false;
+  console.log("✔️ Reusing existing home camera stream for exam.");
+} else {
+  // existing code: try displayMedia then getUserMedia
+  try {
+    stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+    usedScreen = true;
+    console.log("✔️ Using screen share for stream");
+  } catch (err) {
+    console.warn("Screen share failed / denied — falling back to camera:", err);
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      usedScreen = false;
+      console.log("✔️ Using camera for stream");
+    } catch (err2) {
+      console.error("❌ Failed to acquire any media:", err2);
+      alert("Unable to access screen or camera. Please allow permission and try again.");
+      return false;
+    }
+  }
+}
+
   if (!username) {
     console.warn("startExamStream: missing username");
     return false;
@@ -4070,4 +4102,5 @@ async function viewUserScreen(username) {
   document.getElementById("streamUserLabel").textContent = username;
   document.getElementById("streamViewer").classList.remove("hidden");
 }
+
 
