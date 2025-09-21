@@ -297,10 +297,35 @@ min-height:80px
   object-fit: contain;
 }
 
+#fsFooter {
+  position: sticky !important;
+  bottom: 0;
+  z-index: 999 !important;
+  background: linear-gradient(180deg, rgba(6,18,34,0.0), rgba(6,18,34,0.6));
+  padding: 10px 12px;
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  align-items: center;
+  margin-top: 12px;
+}
 
+/* Ensure the buttons are not hidden or transparent */
+#fsFooter .btn {
+  display:inline-flex!important;
+  align-items:center;
+  justify-content:center;
+  min-width:72px;
+  height:38px;
+  padding:6px 10px;
+  border-radius:10px;
+  font-weight:800;
+  border:none;
+}
  
 
   
+
 
 
 
