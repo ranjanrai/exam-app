@@ -1070,20 +1070,59 @@ function toggleFlag(){ const q = EXAM.paper[EXAM.cur]; if(!q) return; EXAM.state
 function updateProgress(){ const answered = Object.keys(EXAM.state.answers).length; const total = EXAM.paper.length; const pct = Math.round((answered/total) * 100); $('#fsProgressFill').style.width = pct + '%'; }
 
 /* NEW: Question navigator */
-function renderQuestionNav(){
+function renderQuestionNav() {
   const nav = document.getElementById('questionNav');
+  if (!nav) return;
   nav.innerHTML = '';
-  EXAM.paper.forEach((q,i)=>{
+
+  nav.setAttribute('role', 'navigation');
+  nav.setAttribute('aria-label', 'Question navigation');
+
+  EXAM.paper.forEach((q, i) => {
     const btn = document.createElement('button');
-    btn.className = 'btn';
-    btn.textContent = i+1;
-    // mark answered
-    if(EXAM.state.answers[q.id] !== undefined) btn.style.background = '#34d399';
-    // highlight current
-    if(i === EXAM.cur) btn.style.outline = '2px solid #60a5fa';
-    btn.onclick = ()=>{ EXAM.cur = i; paintQuestion(); };
+    btn.type = 'button';
+    btn.className = 'qbtn';          // use CSS class instead of inline styles
+    btn.textContent = i + 1;
+
+    // answered state
+    if (EXAM.state.answers[q.id] !== undefined) {
+      btn.classList.add('answered');
+    }
+
+    // flagged state
+    if (EXAM.state.flags && EXAM.state.flags[q.id]) {
+      btn.classList.add('flagged');
+    }
+
+    // current question state
+    if (i === EXAM.cur) {
+      btn.classList.add('current');
+      btn.setAttribute('aria-current', 'true');
+    }
+
+    // click handler
+    btn.onclick = () => {
+      EXAM.cur = i;
+      paintQuestion();
+
+      // ensure active button stays visible if nav scrolls
+      setTimeout(() => {
+        try {
+          btn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+        } catch (e) {}
+      }, 40);
+    };
+
     nav.appendChild(btn);
   });
+
+  // make sure current question is scrolled into view after render
+  const active = nav.querySelector('.qbtn.current');
+  if (active) {
+    try {
+      active.scrollIntoView({ block: 'nearest', inline: 'center' });
+    } catch (e) {}
+  }
 }
 
 /* Timer */
@@ -4087,6 +4126,7 @@ async function viewUserScreen(username) {
   document.getElementById("streamUserLabel").textContent = username;
   document.getElementById("streamViewer").classList.remove("hidden");
 }
+
 
 
 
