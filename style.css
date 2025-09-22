@@ -263,6 +263,14 @@ min-height:80px
   outline: 3px solid rgba(96,165,250,0.35);
   outline-offset: 2px;
 }
+
+  
+#examVideoWrap
+{
+   width: 140px;       /* smaller width */
+  height: 105px;      /* keep 4:3 ratio */
+}
+  
 /* Default webcam size (desktop) */
 #remoteVideo {
   width: 140px;       /* smaller width */
@@ -305,6 +313,7 @@ min-height:80px
 }
 
   
+
 
 
 
