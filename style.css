@@ -313,16 +313,14 @@ min-height:80px
 }
 
   
-/* Center the live camera box */
 #examVideoWrap {
-  display: none;              /* hidden until stream attached */
+  display: none;              /* hidden by default */
   justify-content: center;    /* center horizontally */
-  align-items: center;        /* center vertically if parent is flex */
-  margin: 12px auto;          /* auto margin to center in block layout */
+  align-items: center;        /* center vertically if parent flex */
+  margin: 12px auto;
   text-align: center;
 }
 
-/* Make sure video itself is neat */
 #examVideoWrap video {
   width: 160px;
   height: 120px;
@@ -330,16 +328,17 @@ min-height:80px
   object-fit: cover;
   border: 2px solid rgba(255,255,255,0.15);
   display: block;
-  margin: 0 auto;             /* center the video itself */
+  margin: 0 auto;
 }
 
-/* On mobile, adjust size */
 @media (max-width: 600px) {
   #examVideoWrap video {
     width: 120px;
     height: 90px;
   }
 }
+
+
 
 
 
