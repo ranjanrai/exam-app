@@ -307,7 +307,6 @@ showSection('user');
 // CAMERA permission preview helpers (put inside DOMContentLoaded)
 let _homeCameraStream = null;
 
-// startHomeCamera() — call when user clicks "Enable Camera"
 async function startHomeCamera() {
   try {
     if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
@@ -315,21 +314,24 @@ async function startHomeCamera() {
       return;
     }
 
+    // Ask for camera (video) permission
     const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-    window._homeCameraStream = stream;
-    window.homeCameraEnabled = true;   // <-- set flag that user opted-in
+    _homeCameraStream = stream;
 
     const video = document.getElementById('homeCameraPreview');
     const container = document.getElementById('cameraPreviewContainer');
     const stopBtn = document.getElementById('stopCameraBtn');
     if (video) {
+      // show preview
       video.srcObject = stream;
       container.style.display = 'block';
       stopBtn.classList.remove('hidden');
       document.getElementById('enableCameraBtn').classList.add('hidden');
     }
 
+    // Optional: remember user choice for this browser session (not required)
     try { localStorage.setItem('cameraGranted', '1'); } catch(e){}
+
   } catch (err) {
     console.warn('Camera permission denied or error:', err);
     if (err && err.name === 'NotAllowedError') {
@@ -340,22 +342,27 @@ async function startHomeCamera() {
   }
 }
 
-// stopHomeCamera() — call when user clicks "Stop Camera"
 function stopHomeCamera() {
   try {
-    if (window._homeCameraStream) {
-      window._homeCameraStream.getTracks().forEach(t => { try { t.stop(); } catch(e){} });
-      window._homeCameraStream = null;
+    // stop all tracks
+    if (_homeCameraStream) {
+      _homeCameraStream.getTracks().forEach(t => {
+        try { t.stop(); } catch (e) {}
+      });
+      _homeCameraStream = null;
     }
-    window.homeCameraEnabled = false;  // <-- clear flag
+    // hide preview & toggle buttons
     const video = document.getElementById('homeCameraPreview');
-    if (video) try { video.srcObject = null; } catch(e){}
+    if (video) {
+      try { video.srcObject = null; } catch(e){}
+    }
     const container = document.getElementById('cameraPreviewContainer');
     const stopBtn = document.getElementById('stopCameraBtn');
     if (container) container.style.display = 'none';
     if (stopBtn) stopBtn.classList.add('hidden');
     const enableBtn = document.getElementById('enableCameraBtn');
     if (enableBtn) enableBtn.classList.remove('hidden');
+
     try { localStorage.removeItem('cameraGranted'); } catch(e){}
   } catch (e) {
     console.warn('stopHomeCamera error', e);
@@ -3871,78 +3878,72 @@ function hideVisitorMessage() {
 // Start Exam Stream (combined: reuse preview + WebRTC signaling)
 // --------------------
 async function startExamStream(username) {
-  const videoWrap = document.getElementById("examVideoWrap");
-  const previewEl = document.getElementById("remoteVideo");
+ let stream = null;
+let usedScreen = false;
 
-  // If student did NOT opt-in at home, skip camera entirely.
-  if (!window.homeCameraEnabled) {
-    console.log("ℹ️ Camera not enabled by student on home — skipping live preview.");
-    if (videoWrap) videoWrap.style.display = "none";
-    if (previewEl) previewEl.style.display = "none";
-    return false;
-  }
-
-  // At this point the user opted-in. Reuse home stream if present.
-  let stream = null;
-  let usedScreen = false;
-
-  if (window._homeCameraStream && window._homeCameraStream.getTracks().length) {
-    stream = window._homeCameraStream;
-    console.log("✔️ Reusing existing home camera stream for exam.");
-  } else {
-    // If the flag is set but the stream isn't present, optionally attempt to acquire it.
+// 1. Reuse home camera if available
+if (window._homeCameraStream && window._homeCameraStream.getTracks().length) {
+  stream = window._homeCameraStream;
+  console.log("✔️ Reusing existing home camera stream for exam.");
+} else {
+  try {
+    // 2. Try webcam
+    stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+    console.log("✔️ Using camera for stream");
+  } catch (errCam) {
+    console.warn("Camera failed, trying screen share:", errCam);
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-      console.log("✔️ Acquired camera for exam stream");
-    } catch (errCam) {
-      console.warn("Camera failed, trying screen share:", errCam);
-      try {
-        stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
-        usedScreen = true;
-        console.log("✔️ Using screen share for stream");
-      } catch (errScreen) {
-        console.error("❌ Failed to acquire any media:", errScreen);
-        if (videoWrap) videoWrap.style.display = "none";
-        if (previewEl) previewEl.style.display = "none";
-        window.homeCameraEnabled = false; // reset so future calls won't try again
-        return false;
-      }
+      // 3. Fallback: screen share
+      stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+      usedScreen = true;
+      console.log("✔️ Using screen share for stream");
+    } catch (errScreen) {
+      console.error("❌ Failed to acquire any media:", errScreen);
+      alert("Unable to access camera or screen. Please allow permission and try again.");
+      return false;
     }
   }
-
-  if (!stream) {
-    if (videoWrap) videoWrap.style.display = "none";
-    if (previewEl) previewEl.style.display = "none";
-    return false;
-  }
-
-  // attach stream and continue with signaling / WebRTC as before
-  try {
-    previewEl.srcObject = stream;
-    videoWrap.style.display = "flex";
-    previewEl.play().catch(err => console.warn("Preview play() failed", err));
-  } catch (e) {
-    console.warn("Failed to attach preview element:", e);
-  }
-
-  // ...existing WebRTC & Firestore signaling code (unchanged)...
 }
 
 
+  // Safety: ensure we have a stream
+  if (!stream) {
+    console.error("startExamStream: no media stream available.");
+    alert("No media stream available.");
+    return false;
+  }
+
+  // ✅ Attach stream to video element in exam UI
+  const previewEl = document.getElementById("remoteVideo");
+  if (previewEl) {
+    try {
+      previewEl.srcObject = stream;
+      previewEl.style.display = "block";
+      // autoplay may be blocked until user gesture; catch errors
+      previewEl.play().catch(err => console.warn("Preview play() failed", err));
+    } catch (e) {
+      console.warn("Failed to attach preview element:", e);
+    }
+  }
+
   // ---------- WebRTC / Firestore signaling ----------
+  // build peer connection
   const pc = new RTCPeerConnection(window.RTC_CONFIG || {});
   window._userPC = pc; // keep reference for later cleanup
 
+  // add tracks
   try {
     stream.getTracks().forEach(track => pc.addTrack(track, stream));
   } catch (e) {
     console.warn("Failed to add tracks to PC:", e);
   }
 
+  // Firestore signaling locations
   const callDoc = doc(collection(db, "screenSignals"), username);
   const offerCandidatesCol = collection(callDoc, "offerCandidates");
   const answerCandidatesCol = collection(callDoc, "answerCandidates");
 
+  // onicecandidate -> upload to offerCandidates
   pc.onicecandidate = event => {
     if (event.candidate) {
       try {
@@ -3955,14 +3956,17 @@ async function startExamStream(username) {
     }
   };
 
+  // diagnostic
   pc.onconnectionstatechange = () => {
     console.log("PC state:", pc.connectionState);
   };
 
+  // Create offer, publish, listen for answer & remote ICE
   try {
     const offerDescription = await pc.createOffer();
     await pc.setLocalDescription(offerDescription);
 
+    // write offer doc (overwrites previous)
     await setDoc(callDoc, {
       offer: {
         type: offerDescription.type,
@@ -3974,6 +3978,7 @@ async function startExamStream(username) {
 
     console.log("📡 Published offer to screenSignals/", username);
 
+    // listen for answer doc — set remote description when available
     const unsubAnswerDoc = onSnapshot(callDoc, async snap => {
       const data = snap.exists() ? snap.data() : null;
       if (!data) return;
@@ -3991,6 +3996,7 @@ async function startExamStream(username) {
       }
     });
 
+    // listen for admin answer ICE candidates (admins write into answerCandidates)
     const unsubAnswerCandidates = onSnapshot(answerCandidatesCol, snap => {
       snap.docChanges().forEach(async change => {
         if (change.type === "added") {
@@ -4007,6 +4013,7 @@ async function startExamStream(username) {
       });
     });
 
+    // save references for cleanup
     window._userSignaling = {
       callDocRef: callDoc,
       offerCandidatesColRef: offerCandidatesCol,
@@ -4020,6 +4027,7 @@ async function startExamStream(username) {
     return true;
   } catch (err) {
     console.error("startExamStream failed during signaling:", err);
+    // cleanup on error
     try {
       if (window._userSignaling) {
         try { window._userSignaling.unsubAnswerDoc && window._userSignaling.unsubAnswerDoc(); } catch(e){}
@@ -4027,14 +4035,12 @@ async function startExamStream(username) {
         window._userSignaling = null;
       }
       if (pc) { pc.close(); window._userPC = null; }
-      if (previewEl) { try { previewEl.srcObject = null; previewEl.style.display = "none"; } catch(e){} }
-      if (videoWrap) videoWrap.style.display = "none";
+      if (previewEl) { try { previewEl.srcObject = null; } catch(e){} }
       try { stream.getTracks().forEach(t => { try { t.stop(); } catch(e){} }); } catch(e){}
     } catch(e){}
     return false;
   }
 }
-
 
 // Stop/cleanup helper (complements the above)
 async function stopExamStream() {
@@ -4120,12 +4126,3 @@ async function viewUserScreen(username) {
   document.getElementById("streamUserLabel").textContent = username;
   document.getElementById("streamViewer").classList.remove("hidden");
 }
-
-
-
-
-
-
-
-
-
