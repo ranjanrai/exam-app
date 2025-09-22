@@ -3878,48 +3878,52 @@ function hideVisitorMessage() {
 // Start Exam Stream (combined: reuse preview + WebRTC signaling)
 // --------------------
 async function startExamStream(username) {
- let stream = null;
-let usedScreen = false;
+  let stream = null;
+  let usedScreen = false;
 
-// 1. Reuse home camera if available
-if (window._homeCameraStream && window._homeCameraStream.getTracks().length) {
-  stream = window._homeCameraStream;
-  console.log("✔️ Reusing existing home camera stream for exam.");
-} else {
-  try {
-    // 2. Try webcam
-    stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-    console.log("✔️ Using camera for stream");
-  } catch (errCam) {
-    console.warn("Camera failed, trying screen share:", errCam);
+  const videoWrap = document.getElementById("examVideoWrap");
+  const previewEl = document.getElementById("remoteVideo");
+
+  // 1. Reuse home camera if available
+  if (window._homeCameraStream && window._homeCameraStream.getTracks().length) {
+    stream = window._homeCameraStream;
+    console.log("✔️ Reusing existing home camera stream for exam.");
+  } else {
     try {
-      // 3. Fallback: screen share
-      stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
-      usedScreen = true;
-      console.log("✔️ Using screen share for stream");
-    } catch (errScreen) {
-      console.error("❌ Failed to acquire any media:", errScreen);
-      alert("Unable to access camera or screen. Please allow permission and try again.");
-      return false;
+      // 2. Try webcam
+      stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      console.log("✔️ Using camera for stream");
+    } catch (errCam) {
+      console.warn("Camera failed, trying screen share:", errCam);
+      try {
+        // 3. Fallback: screen share
+        stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+        usedScreen = true;
+        console.log("✔️ Using screen share for stream");
+      } catch (errScreen) {
+        console.error("❌ Failed to acquire any media:", errScreen);
+        // Hide the video box if no media
+        if (videoWrap) videoWrap.style.display = "none";
+        if (previewEl) previewEl.style.display = "none";
+        return false;
+      }
     }
   }
-}
-
 
   // Safety: ensure we have a stream
   if (!stream) {
     console.error("startExamStream: no media stream available.");
-    alert("No media stream available.");
+    if (videoWrap) videoWrap.style.display = "none";
+    if (previewEl) previewEl.style.display = "none";
     return false;
   }
 
   // ✅ Attach stream to video element in exam UI
-  const previewEl = document.getElementById("remoteVideo");
-  if (previewEl) {
+  if (previewEl && videoWrap) {
     try {
       previewEl.srcObject = stream;
+      videoWrap.style.display = "block";   // show container only if active
       previewEl.style.display = "block";
-      // autoplay may be blocked until user gesture; catch errors
       previewEl.play().catch(err => console.warn("Preview play() failed", err));
     } catch (e) {
       console.warn("Failed to attach preview element:", e);
@@ -3927,23 +3931,19 @@ if (window._homeCameraStream && window._homeCameraStream.getTracks().length) {
   }
 
   // ---------- WebRTC / Firestore signaling ----------
-  // build peer connection
   const pc = new RTCPeerConnection(window.RTC_CONFIG || {});
   window._userPC = pc; // keep reference for later cleanup
 
-  // add tracks
   try {
     stream.getTracks().forEach(track => pc.addTrack(track, stream));
   } catch (e) {
     console.warn("Failed to add tracks to PC:", e);
   }
 
-  // Firestore signaling locations
   const callDoc = doc(collection(db, "screenSignals"), username);
   const offerCandidatesCol = collection(callDoc, "offerCandidates");
   const answerCandidatesCol = collection(callDoc, "answerCandidates");
 
-  // onicecandidate -> upload to offerCandidates
   pc.onicecandidate = event => {
     if (event.candidate) {
       try {
@@ -3956,17 +3956,14 @@ if (window._homeCameraStream && window._homeCameraStream.getTracks().length) {
     }
   };
 
-  // diagnostic
   pc.onconnectionstatechange = () => {
     console.log("PC state:", pc.connectionState);
   };
 
-  // Create offer, publish, listen for answer & remote ICE
   try {
     const offerDescription = await pc.createOffer();
     await pc.setLocalDescription(offerDescription);
 
-    // write offer doc (overwrites previous)
     await setDoc(callDoc, {
       offer: {
         type: offerDescription.type,
@@ -3978,7 +3975,6 @@ if (window._homeCameraStream && window._homeCameraStream.getTracks().length) {
 
     console.log("📡 Published offer to screenSignals/", username);
 
-    // listen for answer doc — set remote description when available
     const unsubAnswerDoc = onSnapshot(callDoc, async snap => {
       const data = snap.exists() ? snap.data() : null;
       if (!data) return;
@@ -3996,7 +3992,6 @@ if (window._homeCameraStream && window._homeCameraStream.getTracks().length) {
       }
     });
 
-    // listen for admin answer ICE candidates (admins write into answerCandidates)
     const unsubAnswerCandidates = onSnapshot(answerCandidatesCol, snap => {
       snap.docChanges().forEach(async change => {
         if (change.type === "added") {
@@ -4013,7 +4008,6 @@ if (window._homeCameraStream && window._homeCameraStream.getTracks().length) {
       });
     });
 
-    // save references for cleanup
     window._userSignaling = {
       callDocRef: callDoc,
       offerCandidatesColRef: offerCandidatesCol,
@@ -4027,7 +4021,6 @@ if (window._homeCameraStream && window._homeCameraStream.getTracks().length) {
     return true;
   } catch (err) {
     console.error("startExamStream failed during signaling:", err);
-    // cleanup on error
     try {
       if (window._userSignaling) {
         try { window._userSignaling.unsubAnswerDoc && window._userSignaling.unsubAnswerDoc(); } catch(e){}
@@ -4035,12 +4028,14 @@ if (window._homeCameraStream && window._homeCameraStream.getTracks().length) {
         window._userSignaling = null;
       }
       if (pc) { pc.close(); window._userPC = null; }
-      if (previewEl) { try { previewEl.srcObject = null; } catch(e){} }
+      if (previewEl) { try { previewEl.srcObject = null; previewEl.style.display = "none"; } catch(e){} }
+      if (videoWrap) videoWrap.style.display = "none";
       try { stream.getTracks().forEach(t => { try { t.stop(); } catch(e){} }); } catch(e){}
     } catch(e){}
     return false;
   }
 }
+
 
 // Stop/cleanup helper (complements the above)
 async function stopExamStream() {
@@ -4126,6 +4121,7 @@ async function viewUserScreen(username) {
   document.getElementById("streamUserLabel").textContent = username;
   document.getElementById("streamViewer").classList.remove("hidden");
 }
+
 
 
 
