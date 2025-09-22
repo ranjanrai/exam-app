@@ -3181,7 +3181,7 @@ function triggerAutoLock(reason) {
       examPaused = true;
       if (document.getElementById("lockScreen")) document.getElementById("lockScreen").style.display = "flex";
       if (EXAM && EXAM.state && EXAM.state.username) {
-       saveSessionToFirestore(EXAM.state.username, { ...EXAM.state, locked: true }, EXAM.paper).catch(e => console.warn(e));
+        saveSessionToFirestore(EXAM.state.username, { ...EXAM.state, locked: true }, EXAM.paper).catch(e=>console.warn(e));
       }
       startPausedSessionPolling();
     }
@@ -3878,34 +3878,53 @@ function hideVisitorMessage() {
 // Start Exam Stream (combined: reuse preview + WebRTC signaling)
 // --------------------
 async function startExamStream(username) {
-  let stream = null;
-  let usedScreen = false;
+ let stream = null;
+let usedScreen = false;
 
-  const videoWrap = document.getElementById("examVideoWrap");
-  const previewEl = document.getElementById("remoteVideo");
+// 1. Reuse home camera if available
+if (window._homeCameraStream && window._homeCameraStream.getTracks().length) {
+  stream = window._homeCameraStream;
+  console.log("✔️ Reusing existing home camera stream for exam.");
+} else {
+  try {
+    // 2. Try webcam
+    stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+    console.log("✔️ Using camera for stream");
+  } catch (errCam) {
+    console.warn("Camera failed, trying screen share:", errCam);
+    try {
+      // 3. Fallback: screen share
+      stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+      usedScreen = true;
+      console.log("✔️ Using screen share for stream");
+    } catch (errScreen) {
+      console.error("❌ Failed to acquire any media:", errScreen);
+      alert("Unable to access camera or screen. Please allow permission and try again.");
+      return false;
+    }
+  }
+}
 
-  // 👉 Only reuse if student enabled camera at home
-  if (window._homeCameraStream && window._homeCameraStream.getTracks().length) {
-    stream = window._homeCameraStream;
-    console.log("✔️ Reusing existing home camera stream for exam.");
-  } else {
-    // No camera chosen → skip completely
-    if (videoWrap) videoWrap.style.display = "none";
-    if (previewEl) previewEl.style.display = "none";
-    console.log("ℹ️ Camera is optional. Skipping live preview.");
+
+  // Safety: ensure we have a stream
+  if (!stream) {
+    console.error("startExamStream: no media stream available.");
+    alert("No media stream available.");
     return false;
   }
 
-  // ✅ Attach stream to exam video
-  if (previewEl && videoWrap) {
-    previewEl.srcObject = stream;
-    videoWrap.style.display = "flex";   // flex → center
-    previewEl.style.display = "block";
-    previewEl.play().catch(err => console.warn("Preview play() failed", err));
+  // ✅ Attach stream to video element in exam UI
+  const previewEl = document.getElementById("remoteVideo");
+  if (previewEl) {
+    try {
+      previewEl.srcObject = stream;
+      previewEl.style.display = "block";
+      // autoplay may be blocked until user gesture; catch errors
+      previewEl.play().catch(err => console.warn("Preview play() failed", err));
+    } catch (e) {
+      console.warn("Failed to attach preview element:", e);
+    }
   }
-
-  // (keep your WebRTC / Firestore signaling code if admin monitoring is required…)
-}
 
   // ---------- WebRTC / Firestore signaling ----------
   // build peer connection
@@ -4107,5 +4126,9 @@ async function viewUserScreen(username) {
   document.getElementById("streamUserLabel").textContent = username;
   document.getElementById("streamViewer").classList.remove("hidden");
 }
+
+
+
+
 
 
