@@ -3181,7 +3181,7 @@ function triggerAutoLock(reason) {
       examPaused = true;
       if (document.getElementById("lockScreen")) document.getElementById("lockScreen").style.display = "flex";
       if (EXAM && EXAM.state && EXAM.state.username) {
-        saveSessionToFirestore(EXAM.state.username, { ...EXAM.state, locked: true }, EXAM.paper).catch(e=>console.warn(e));
+       saveSessionToFirestore(EXAM.state.username, { ...EXAM.state, locked: true }, EXAM.paper).catch(e => console.warn(e));
       }
       startPausedSessionPolling();
     }
@@ -4107,4 +4107,5 @@ async function viewUserScreen(username) {
   document.getElementById("streamUserLabel").textContent = username;
   document.getElementById("streamViewer").classList.remove("hidden");
 }
+
 
