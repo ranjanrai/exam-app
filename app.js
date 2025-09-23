@@ -1,4 +1,4 @@
-async function saveToFirestore(collectionName, id, data, localKey=null) {
+ async function saveToFirestore(collectionName, id, data, localKey=null) {
   try {
     if (localKey) write(localKey, data); // keep offline copy
     await setDoc(doc(db, collectionName, id), data);
@@ -4186,65 +4186,8 @@ async function viewUserScreen(username) {
 }
 
 
-// --- Force a guarded startExamStream implementation (paste at end of app.js) ---
-window.startExamStream = async function(username) {
-  let stream = null;
-  let usedScreen = false;
 
-  // Prefer reusing Home preview streams (if any)
-  if (window._homeCameraStream && window._homeCameraStream.getTracks && window._homeCameraStream.getTracks().length) {
-    stream = window._homeCameraStream;
-    console.log("✔️ Reusing home camera stream for exam.");
-  } else if (window._homeScreenStream && window._homeScreenStream.getTracks && window._homeScreenStream.getTracks().length) {
-    stream = window._homeScreenStream;
-    usedScreen = true;
-    console.log("✔️ Reusing home screen stream for exam.");
-  } else {
-    // Only auto-request permissions if user explicitly enabled earlier
-    const cameraGranted = localStorage.getItem('cameraGranted') === '1';
-    const screenGranted = localStorage.getItem('screenShareGranted') === '1';
-    const screenEnabled = !!window.screenShareEnabled || !!screenShareEnabled || screenGranted;
 
-    if (!cameraGranted && !screenEnabled) {
-      console.log("No preview/flag set — NOT prompting for camera/screen on exam start.");
-      alert("Camera / Screen sharing is not enabled. Go to Home and click 'Enable Camera' or 'Enable Screen Share' first.");
-      return false;
-    }
-
-    try {
-      if (cameraGranted) {
-        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-        console.log("✔️ Acquired camera after explicit Home enable.");
-      } else if (screenEnabled) {
-        stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
-        usedScreen = true;
-        console.log("✔️ Acquired screen-share after explicit Home enable.");
-      }
-    } catch (err) {
-      console.warn("Auto media acquisition failed:", err);
-      alert("Unable to access camera or screen. Please enable from the Home preview or browser settings.");
-      return false;
-    }
-  }
-
-  if (!stream) {
-    console.error("startExamStream: no media stream available.");
-    alert("No media stream available.");
-    return false;
-  }
-
-  // Attach to exam preview element
-  const previewEl = document.getElementById("remoteVideo");
-  if (previewEl) {
-    try { previewEl.srcObject = stream; previewEl.style.display = "block"; previewEl.play().catch(()=>{}); } catch(e){console.warn(e);}
-  }
-
-  // Keep the rest of your existing WebRTC signaling code intact by calling the original internal function if exists
-  // (if your code expects more logic here, you can copy the signaling part from your existing guarded implementation).
-  // For now ensure we return true so calling code continues.
-  window._userStream = stream;
-  return true;
-};
 
 
 
