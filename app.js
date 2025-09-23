@@ -3916,50 +3916,47 @@ function hideVisitorMessage() {
 // --------------------
 // Start Exam Stream (combined: reuse preview + WebRTC signaling)
 // --------------------
+// Unified guarded startExamStream — paste once (replace any other definitions)
 async function startExamStream(username) {
- let stream = null;
-let usedScreen = false;
+  let stream = null;
+  let usedScreen = false;
 
-// --- media acquisition: only if preview/explicitly enabled ---
-// Reuse home camera if available
-if (window._homeCameraStream && window._homeCameraStream.getTracks && window._homeCameraStream.getTracks().length) {
-  stream = window._homeCameraStream;
-  console.log("✔️ Reusing existing home camera stream for exam.");
-} else if (window._homeScreenStream && window._homeScreenStream.getTracks && window._homeScreenStream.getTracks().length) {
-  // reuse home screen share if user started it on Home
-  stream = window._homeScreenStream;
-  usedScreen = true;
-  console.log("✔️ Reusing existing home screen-share stream for exam.");
-} else {
-  // Only prompt automatically if user explicitly enabled preview earlier:
-  const cameraGranted = localStorage.getItem('cameraGranted') === '1';
-  // `screenShareEnabled` is an in-memory flag set when user clicks enable on Home.
-  const screenEnabled = !!window.screenShareEnabled || !!screenShareEnabled;
+  // Reuse home camera if available
+  if (window._homeCameraStream && window._homeCameraStream.getTracks && window._homeCameraStream.getTracks().length) {
+    stream = window._homeCameraStream;
+    console.log("✔️ Reusing existing home camera stream for exam.");
+  } else if (window._homeScreenStream && window._homeScreenStream.getTracks && window._homeScreenStream.getTracks().length) {
+    // reuse home screen share if user started it on Home
+    stream = window._homeScreenStream;
+    usedScreen = true;
+    console.log("✔️ Reusing existing home screen-share stream for exam.");
+  } else {
+    // Only prompt automatically if user explicitly enabled preview earlier:
+    const cameraGranted = localStorage.getItem('cameraGranted') === '1';
+    const screenEnabled = !!window.screenShareEnabled || !!screenShareEnabled || localStorage.getItem('screenShareGranted') === '1';
 
-  if (!cameraGranted && !screenEnabled) {
-    console.log("No Home preview enabled and no explicit permission flag — NOT prompting for camera/screen on exam start.");
-    // show placeholder or alert and return (avoids browser permission prompt)
-    alert("Camera / Screen sharing is not enabled. Please go back to the Home screen and click 'Enable Camera' or 'Enable Screen Share' before starting the exam.");
-    return false;
-  }
-
-  // If we get here, one of the flags says the user previously enabled — try to acquire but still handle failure gracefully.
-  try {
-    if (cameraGranted) {
-      stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-      console.log("✔️ Using camera for stream (auto after explicit Home enable).");
-    } else if (screenEnabled) {
-      stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
-      usedScreen = true;
-      console.log("✔️ Using screen share for stream (auto after explicit Home enable).");
+    if (!cameraGranted && !screenEnabled) {
+      console.log("No Home preview enabled and no explicit permission flag — NOT prompting for camera/screen on exam start.");
+      alert("Camera / Screen sharing is not enabled. Please go back to the Home screen and click 'Enable Camera' or 'Enable Screen Share' before starting the exam.");
+      return false;
     }
-  } catch (err) {
-    console.warn("Auto media acquisition failed:", err);
-    alert("Unable to access camera or screen. Please enable from the Home preview or browser settings.");
-    return false;
-  }
-}
 
+    // If we get here, one of the flags says the user previously enabled — try to acquire but handle failure gracefully.
+    try {
+      if (cameraGranted) {
+        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        console.log("✔️ Using camera for stream (auto after explicit Home enable).");
+      } else if (screenEnabled) {
+        stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+        usedScreen = true;
+        console.log("✔️ Using screen share for stream (auto after explicit Home enable).");
+      }
+    } catch (err) {
+      console.warn("Auto media acquisition failed:", err);
+      alert("Unable to access camera or screen. Please enable from the Home preview or browser settings.");
+      return false;
+    }
+  }
 
   // Safety: ensure we have a stream
   if (!stream) {
@@ -3968,18 +3965,24 @@ if (window._homeCameraStream && window._homeCameraStream.getTracks && window._ho
     return false;
   }
 
-  // ✅ Attach stream to video element in exam UI
+  // Attach stream to video element in exam UI
   const previewEl = document.getElementById("remoteVideo");
   if (previewEl) {
     try {
       previewEl.srcObject = stream;
       previewEl.style.display = "block";
-      // autoplay may be blocked until user gesture; catch errors
       previewEl.play().catch(err => console.warn("Preview play() failed", err));
     } catch (e) {
       console.warn("Failed to attach preview element:", e);
     }
   }
+
+  // --- continue with your existing WebRTC + signaling code below ---
+  // (keep the rest of your startExamStream logic that creates RTCPeerConnection,
+  // adds tracks, publishes the offer and attaches onSnapshot listeners)
+  // ...
+}
+
 
   // ---------- WebRTC / Firestore signaling ----------
   // build peer connection
@@ -4181,6 +4184,7 @@ async function viewUserScreen(username) {
   document.getElementById("streamUserLabel").textContent = username;
   document.getElementById("streamViewer").classList.remove("hidden");
 }
+
 
 
 
