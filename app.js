@@ -3908,61 +3908,56 @@ function hideVisitorMessage() {
 }
 
 
-/* ---------------- HYBRID EXAM STREAMING ---------------- */
-
-// --------------------
-// Start Exam Stream
-// --------------------
-// --------------------
-// Start Exam Stream (combined: reuse preview + WebRTC signaling)
-// --------------------
-// ✅ Updated: camera/screen share are optional
+// ✅ Camera & Screen share are optional
 async function startExamStream(username) {
-  let stream = null;
-  let usedScreen = false;
-
   try {
+    let stream = null;
+
     // Reuse camera preview if enabled
-    if (window._homeCameraStream && window._homeCameraStream.getTracks && window._homeCameraStream.getTracks().length) {
+    if (window._homeCameraStream && window._homeCameraStream.getTracks?.().length) {
       stream = window._homeCameraStream;
-      console.log("✔️ Reusing existing home camera stream for exam.");
+      console.log("✔️ Using existing home camera stream.");
     }
 
     // Reuse screen share preview if enabled
-    if (window._homeScreenStream && window._homeScreenStream.getTracks && window._homeScreenStream.getTracks().length) {
+    if (window._homeScreenStream && window._homeScreenStream.getTracks?.().length) {
       if (stream) {
-        // merge screen tracks into camera stream
-        window._homeScreenStream.getTracks().forEach(t => {
-          try { stream.addTrack(t); } catch (e) { console.warn("Track merge failed", e); }
+        // Merge screen tracks into camera stream
+        window._homeScreenStream.getTracks().forEach(track => {
+          try { stream.addTrack(track); } 
+          catch (err) { console.warn("Track merge failed:", err); }
         });
       } else {
         stream = window._homeScreenStream;
       }
-      usedScreen = true;
-      console.log("✔️ Reusing existing home screen-share stream for exam.");
+      console.log("✔️ Using existing home screen-share stream.");
     }
 
-    // If no stream → just continue without blocking
+    // If no stream → continue exam without video
     if (!stream) {
-      console.log("ℹ️ No camera/screen share selected. Continuing exam without live video.");
-      return true; // exam can continue
+      console.log("ℹ️ No camera/screen share selected. Proceeding without video.");
+      return true;
     }
 
     // Attach to exam UI video element if present
-    const previewEl = document.getElementById("remoteVideo");
-    if (previewEl) {
-      previewEl.srcObject = stream;
-      previewEl.style.display = "block";
-      previewEl.play().catch(err => console.warn("Preview play() failed", err));
+    const videoEl = document.getElementById("remoteVideo");
+    if (videoEl) {
+      videoEl.srcObject = stream;
+      videoEl.style.display = "block";
+      try {
+        await videoEl.play();
+      } catch (err) {
+        console.warn("Video autoplay failed:", err);
+      }
     }
 
     return true;
   } catch (err) {
     console.warn("⚠️ startExamStream error:", err);
-    // Do NOT block the exam — allow continuation
-    return true;
+    return true; // Always allow exam to continue
   }
 }
+
 
 
   // ---------- WebRTC / Firestore signaling ----------
@@ -4165,6 +4160,7 @@ async function viewUserScreen(username) {
   document.getElementById("streamUserLabel").textContent = username;
   document.getElementById("streamViewer").classList.remove("hidden");
 }
+
 
 
 
