@@ -2715,18 +2715,83 @@ function renderExamHeader() {
     }
   }
 
+// Export results array (or results from local storage) to CSV and download
+async function exportResultsCSV(filename = 'exam_results.csv') {
+  try {
+    // prefer in-memory results array if available
+    let arr = Array.isArray(results) ? results : null;
 
+    // fallback: try to load from local storage (encrypted attempts skipped here)
+    if (!arr || arr.length === 0) {
+      try {
+        const stored = read(K_RESULTS, null);
+        if (stored) {
+          // if your storage is encrypted, adapt to decryptData(stored)
+          // if decryptData is available and storage is encrypted:
+          if (typeof decryptData === 'function') {
+            try {
+              arr = await decryptData(stored);
+            } catch (_) {
+              // fallback to JSON parse if decrypt fails
+              try { arr = JSON.parse(stored); } catch (e) { arr = []; }
+            }
+          } else {
+            try { arr = JSON.parse(stored); } catch (e) { arr = []; }
+          }
+        }
+      } catch (e) {
+        console.warn('Could not load results from storage:', e);
+        arr = arr || [];
+      }
+    }
 
+    if (!Array.isArray(arr) || arr.length === 0) {
+      alert('No results available to export.');
+      return;
+    }
 
+    // Determine CSV columns (union of keys in objects)
+    const colsSet = new Set();
+    arr.forEach(obj => {
+      if (obj && typeof obj === 'object') {
+        Object.keys(obj).forEach(k => colsSet.add(k));
+      }
+    });
+    const cols = Array.from(colsSet);
 
-/* Export results CSV */
-function exportResultsCSV(){
-  if(results.length === 0) return alert('No results to export');
-  const rows = [['username','totalPercent','synopsis','minor_practical','major_practical','viva','timestamp']];
-  results.forEach(r => rows.push([r.username, r.totalScorePercent, r.sectionScores['Synopsis']||0, r.sectionScores['Minor Practical']||0, r.sectionScores['Major Practical']||0, r.sectionScores['Viva']||0, new Date(r.timestamp).toISOString()]));
-  const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
-  download('results.csv', csv, 'text/csv');
+    // Helper to escape CSV fields
+    const esc = v => {
+      if (v === null || v === undefined) return '';
+      const s = (typeof v === 'object') ? JSON.stringify(v) : String(v);
+      // escape double-quotes by doubling them, wrap field in quotes if contains comma/newline/quote
+      const needsWrap = /[,"\n\r]/.test(s);
+      const out = s.replace(/"/g, '""');
+      return needsWrap ? `"${out}"` : out;
+    };
+
+    // Build CSV lines
+    const header = cols.map(c => esc(c)).join(',');
+    const lines = arr.map(obj => cols.map(c => esc(obj[c])).join(','));
+    const csv = [header, ...lines].join('\r\n');
+
+    // Download
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    console.log('✅ Exported results to CSV:', filename);
+  } catch (err) {
+    console.error('exportResultsCSV failed:', err);
+    alert('Failed to export results (see console).');
+  }
 }
+window.exportResultsCSV = exportResultsCSV;
+
 
 /* ---------- Import / Export functions ---------- */
 
@@ -2769,22 +2834,6 @@ function exportQuestions(){ download('questions.json', JSON.stringify(questions,
 function exportResultsJSON(){
   if(results.length === 0) return alert('No results to export');
   download('results.json', JSON.stringify(results, null, 2), 'application/json');
-}
-
-function exportResultsCSV(){
-  if(results.length === 0) return alert('No results to export');
-  const rows = [['username','totalPercent','synopsis','minor','major','viva','timestamp']];
-  results.forEach(r => rows.push([
-    r.username,
-    r.totalScorePercent,
-    r.sectionScores['Synopsis']||0,
-    r.sectionScores['Minor Practical']||0,
-    r.sectionScores['Major Practical']||0,
-    r.sectionScores['Viva']||0,
-    new Date(r.timestamp).toISOString()
-  ]));
-  const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
-  download('results.csv', csv, 'text/csv');
 }
 
 async function importResultsFile(e) {
@@ -4100,6 +4149,7 @@ async function viewUserScreen(username) {
   document.getElementById("streamUserLabel").textContent = username;
   document.getElementById("streamViewer").classList.remove("hidden");
 }
+
 
 
 
