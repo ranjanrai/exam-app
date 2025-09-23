@@ -1782,45 +1782,6 @@ function renderUsersAdmin(){
     box.appendChild(div);
   });
 }
-async function renderSessionsAdmin() {
-  try {
-    const snap = await getDocs(collection(db, "sessions"));
-    const out = document.getElementById("sessionsList");
-    if (!out) return;
-
-    const arr = [];
-    snap.forEach(d => {
-      const data = d.data();
-      if (!data) return;
-      if (data.remainingMs > 0 && !data.submitted) {
-        arr.push({ id: d.id, ...data });
-      }
-    });
-
-    out.innerHTML = "";
-
-    if (arr.length === 0) {
-      out.innerHTML = `<div class="small">No one is giving exam</div>`;
-      return;
-    }
-
-    arr.forEach(s => {
-      const div = document.createElement("div");
-      div.className = "list-item";
-      div.innerHTML = `
-        <div style="flex:1">
-          <b>${escapeHTML(s.id)}</b>
-          <span class="small"> • ${Math.round((s.remainingMs||0)/60000)} min left</span>
-        </div>
-        <button class="btn brand" onclick="watchLiveSession('${s.id}')">👀 Watch</button>
-      `;
-      out.appendChild(div);
-    });
-  } catch (err) {
-    console.warn("renderSessionsAdmin error", err);
-  }
-}
-window.renderSessionsAdmin = renderSessionsAdmin;
 
 function watchLiveSession(username) {
   alert("🔴 Opening live feed for " + username);
@@ -4139,6 +4100,7 @@ async function viewUserScreen(username) {
   document.getElementById("streamUserLabel").textContent = username;
   document.getElementById("streamViewer").classList.remove("hidden");
 }
+
 
 
 
