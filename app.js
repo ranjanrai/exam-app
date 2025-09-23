@@ -3434,22 +3434,7 @@ window.addEventListener("DOMContentLoaded", () => {
   initApp();
 })
 
-async function loadSettingsFromFirestore() {
-  try {
-    const snap = await getDoc(doc(db, "settings", "exam"));
-    if (snap.exists()) {
-      settings = snap.data();
-      write(K_SETTINGS, settings); // sync offline copy
-      console.log("✅ Loaded settings from Firestore:", settings);
-    } else {
-      console.warn("⚠️ No settings found in Firestore, using offline copy");
-      settings = read(K_SETTINGS, {});
-    }
-  } catch (err) {
-    console.error("❌ Firestore load error (settings):", err);
-    settings = read(K_SETTINGS, {});
-  }
-}
+
   
 async function loadQuestionsFromFirestore() {
   try {
@@ -4149,6 +4134,7 @@ async function viewUserScreen(username) {
   document.getElementById("streamUserLabel").textContent = username;
   document.getElementById("streamViewer").classList.remove("hidden");
 }
+
 
 
 
