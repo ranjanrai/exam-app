@@ -1385,27 +1385,6 @@ function updateTimerText(){ const ms = Math.max(0, EXAM.state.remainingMs); $('#
 function msToTime(ms){ const s = Math.floor(ms/1000); const hh = String(Math.floor(s/3600)).padStart(2,'0'); const mm = String(Math.floor((s%3600)/60)).padStart(2,'0'); const ss = String(s%60).padStart(2,'0'); return `${hh}:${mm}:${ss}`; }
 
 /* Submit exam: calculate marks, per-section scores, save results, show percent & progress bar only */
-function renderQuestionNav(){
-  const nav = document.getElementById('questionNav');
-  nav.innerHTML = '';
-  EXAM.paper.forEach((q,i)=>{
-    const btn = document.createElement('button');
-    btn.className = 'btn';
-    btn.textContent = i+1;
-    if(EXAM.state.answers[q.id] !== undefined) {
-  btn.style.background = '#34d399'; // green if answered
-}
-if(EXAM.state.flags[q.id]) {
-  btn.style.border = '2px solid orange'; // orange border for flagged
-}
-if(i === EXAM.cur) {
-  btn.style.outline = '2px solid #60a5fa'; // blue outline for current
-}
-
-    btn.onclick = ()=>{ EXAM.cur = i; paintQuestion(); };
-    nav.appendChild(btn);
-  });
-}
 
 async function submitExam(auto = false) {
   if (!auto && !confirm('Submit exam now?')) return;
@@ -4160,6 +4139,7 @@ async function viewUserScreen(username) {
   document.getElementById("streamUserLabel").textContent = username;
   document.getElementById("streamViewer").classList.remove("hidden");
 }
+
 
 
 
