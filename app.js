@@ -415,7 +415,6 @@ window.showSection = function(id) {
 let _homeScreenStream = null;
 
 async function startHomeScreenShare() {
-  
   try {
     if (!navigator.mediaDevices || typeof navigator.mediaDevices.getDisplayMedia !== 'function') {
       alert('Screen sharing API not available in this browser.');
@@ -423,21 +422,36 @@ async function startHomeScreenShare() {
     }
 
     const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
-    _homeScreenStream = stream;
-    screenShareEnabled = true;   // ✅ mark as enabled
+
+    // save on window so other parts of app can reuse
+    window._homeScreenStream = stream;
+    screenShareEnabled = true;   // in-memory flag
+    localStorage.setItem('screenShareGranted', '1'); // persistent short-lived flag
 
     const video = document.getElementById('homeScreenSharePreview');
     const container = document.getElementById('screenSharePreviewContainer');
     const stopBtn = document.getElementById('stopScreenShareBtn');
+    const enableBtn = document.getElementById('enableScreenShareBtn');
+
     if (video) {
       video.srcObject = stream;
-      container.style.display = 'block';
-      stopBtn.classList.remove('hidden');
-      document.getElementById('enableScreenShareBtn').classList.add('hidden');
+      container && (container.style.display = 'block');
+      stopBtn && stopBtn.classList.remove('hidden');
+      enableBtn && enableBtn.classList.add('hidden');
     }
 
-    // Auto-stop if user ends from browser toolbar
-    stream.getVideoTracks()[0].addEventListener('ended', stopHomeScreenShare);
+    // Auto-stop if user ends from browser toolbar (and clear flag)
+    const videoTrack = stream.getVideoTracks()[0];
+    if (videoTrack) {
+      // store a reference so stopHomeScreenShare can remove the listener if needed
+      const onEnded = () => {
+        try { stopHomeScreenShare(); } catch(e) { console.warn('Error in onEnded handler', e); }
+      };
+      // attach the listener
+      videoTrack.addEventListener('ended', onEnded);
+      // also attach the listener object to stream so stop can remove it if needed
+      stream._onEndedListener = onEnded;
+    }
 
   } catch (err) {
     console.warn('Screen share denied or error:', err);
@@ -445,22 +459,47 @@ async function startHomeScreenShare() {
   }
 }
 
+
 function stopHomeScreenShare() {
   try {
-    if (_homeScreenStream) {
-      _homeScreenStream.getTracks().forEach(t => { try { t.stop(); } catch (e) {} });
-      _homeScreenStream = null;
+    const stream = window._homeScreenStream;
+    if (stream) {
+      // remove any ended listener attached earlier
+      try {
+        const videoTrack = stream.getVideoTracks()[0];
+        if (videoTrack && typeof stream._onEndedListener === 'function') {
+          videoTrack.removeEventListener('ended', stream._onEndedListener);
+        }
+      } catch (e) {
+        console.warn('Error removing ended listener', e);
+      }
+
+      // stop all tracks
+      stream.getTracks().forEach(t => {
+        try { t.stop(); } catch (e) { console.warn('track stop failed', e); }
+      });
+      window._homeScreenStream = null;
     }
-    screenShareEnabled = false;   // ✅ reset flag
+
+    // clear flags and UI
+    screenShareEnabled = false;
+    localStorage.removeItem('screenShareGranted');
+
     const video = document.getElementById('homeScreenSharePreview');
+    const container = document.getElementById('screenSharePreviewContainer');
+    const stopBtn = document.getElementById('stopScreenShareBtn');
+    const enableBtn = document.getElementById('enableScreenShareBtn');
+
     if (video) video.srcObject = null;
-    document.getElementById('screenSharePreviewContainer').style.display = 'none';
-    document.getElementById('stopScreenShareBtn').classList.add('hidden');
-    document.getElementById('enableScreenShareBtn').classList.remove('hidden');
-  } catch (e) {
-    console.warn('stopHomeScreenShare error', e);
+    if (container) container.style.display = 'none';
+    if (stopBtn) stopBtn.classList.add('hidden');
+    if (enableBtn) enableBtn.classList.remove('hidden');
+
+  } catch (err) {
+    console.warn('Error stopping screen share:', err);
   }
 }
+
 
 /* ---------- USER FLOW ---------- */
 
@@ -3881,27 +3920,43 @@ async function startExamStream(username) {
  let stream = null;
 let usedScreen = false;
 
-// 1. Reuse home camera if available
-if (window._homeCameraStream && window._homeCameraStream.getTracks().length) {
+// --- media acquisition: only if preview/explicitly enabled ---
+// Reuse home camera if available
+if (window._homeCameraStream && window._homeCameraStream.getTracks && window._homeCameraStream.getTracks().length) {
   stream = window._homeCameraStream;
   console.log("✔️ Reusing existing home camera stream for exam.");
+} else if (window._homeScreenStream && window._homeScreenStream.getTracks && window._homeScreenStream.getTracks().length) {
+  // reuse home screen share if user started it on Home
+  stream = window._homeScreenStream;
+  usedScreen = true;
+  console.log("✔️ Reusing existing home screen-share stream for exam.");
 } else {
+  // Only prompt automatically if user explicitly enabled preview earlier:
+  const cameraGranted = localStorage.getItem('cameraGranted') === '1';
+  // `screenShareEnabled` is an in-memory flag set when user clicks enable on Home.
+  const screenEnabled = !!window.screenShareEnabled || !!screenShareEnabled;
+
+  if (!cameraGranted && !screenEnabled) {
+    console.log("No Home preview enabled and no explicit permission flag — NOT prompting for camera/screen on exam start.");
+    // show placeholder or alert and return (avoids browser permission prompt)
+    alert("Camera / Screen sharing is not enabled. Please go back to the Home screen and click 'Enable Camera' or 'Enable Screen Share' before starting the exam.");
+    return false;
+  }
+
+  // If we get here, one of the flags says the user previously enabled — try to acquire but still handle failure gracefully.
   try {
-    // 2. Try webcam
-    stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-    console.log("✔️ Using camera for stream");
-  } catch (errCam) {
-    console.warn("Camera failed, trying screen share:", errCam);
-    try {
-      // 3. Fallback: screen share
+    if (cameraGranted) {
+      stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      console.log("✔️ Using camera for stream (auto after explicit Home enable).");
+    } else if (screenEnabled) {
       stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
       usedScreen = true;
-      console.log("✔️ Using screen share for stream");
-    } catch (errScreen) {
-      console.error("❌ Failed to acquire any media:", errScreen);
-      alert("Unable to access camera or screen. Please allow permission and try again.");
-      return false;
+      console.log("✔️ Using screen share for stream (auto after explicit Home enable).");
     }
+  } catch (err) {
+    console.warn("Auto media acquisition failed:", err);
+    alert("Unable to access camera or screen. Please enable from the Home preview or browser settings.");
+    return false;
   }
 }
 
@@ -4126,6 +4181,7 @@ async function viewUserScreen(username) {
   document.getElementById("streamUserLabel").textContent = username;
   document.getElementById("streamViewer").classList.remove("hidden");
 }
+
 
 
 
