@@ -841,9 +841,15 @@ window.startAnnouncementsListenerForStudents = startAnnouncementsListenerForStud
 <div id="answerStats" class="answer-stats"></div>
 
 </div>
- <script type="module" src="app.js"></script>
+ <script type="module" src="app.js">
+   window.addEventListener("DOMContentLoaded", () => {
+  startAnnouncementsListenerForStudents();
+  startSessionsRealtimeListener();
+});
+ </script>
 </body>
 </html>
+
 
 
 
