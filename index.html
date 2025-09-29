@@ -23,6 +23,10 @@
   window.db = getFirestore(app);
   window.storage = getStorage(app);
 
+  // --- Anonymous Auth: add this block directly after window.storage = getStorage(app);
+import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+
+
   // ✅ Expose Firestore helpers globally
    // ✅ Expose Firestore helpers globally (make sure module-level imports are available to non-module callers)
   window.setDoc = setDoc;
@@ -4374,4 +4378,5 @@ function hideVisitorMessage() {
 </script>
 </body>
 </html>
+
 
