@@ -2847,76 +2847,130 @@ function downloadBackup() {
 // ----------------- Improved importFullBackup -----------------
 async function importFullBackup(file) {
   const reader = new FileReader();
+
   reader.onload = async (e) => {
     try {
       const backup = JSON.parse(e.target.result);
 
-      // update in-memory and localStorage
-      users = backup.users || [];
-      questions = backup.questions || [];
-      results = backup.results || [];
+      // ==========================================
+      // DELETE ALL EXISTING DATA
+      // ==========================================
+      localStorage.clear();
 
-      // Merge settings safely (keeps existing defaults if missing)
-      settings = {
-        ...settings,
-        durationMin: backup.settings?.durationMin ?? settings.durationMin,
-        customMsg: backup.settings?.customMsg ?? settings.customMsg,
-        shuffle: backup.settings?.shuffle ?? settings.shuffle,
-        allowAfterTime: backup.settings?.allowAfterTime ?? settings.allowAfterTime,
-        logo: backup.settings?.logo ?? settings.logo,
-        author: backup.settings?.author ?? settings.author,
-        college: backup.settings?.college ?? settings.college,
-        subject: backup.settings?.subject ?? settings.subject,
-        subjectCode: backup.settings?.subjectCode ?? settings.subjectCode,
-        fullMarks: backup.settings?.fullMarks ?? settings.fullMarks,
-        counts: {
-          Synopsis: backup.settings?.counts?.Synopsis ?? settings.counts?.Synopsis ?? 0,
-          "Minor Practical": backup.settings?.counts?.["Minor Practical"] ?? settings.counts?.["Minor Practical"] ?? 0,
-          "Major Practical": backup.settings?.counts?.["Major Practical"] ?? settings.counts?.["Major Practical"] ?? 0,
-          Viva: backup.settings?.counts?.Viva ?? settings.counts?.Viva ?? 0
-        },
-        totalQs: backup.settings?.totalQs ?? settings.totalQs // if present
-      };
+      users = [];
+      questions = [];
+      results = [];
+      settings = {};
+      adminCred = MASTER_ADMIN;
 
-      adminCred = backup.adminCred || MASTER_ADMIN;
+      // ==========================================
+      // RESTORE FROM BACKUP
+      // ==========================================
+      users = structuredClone(backup.users || []);
+      questions = structuredClone(backup.questions || []);
+      results = structuredClone(backup.results || []);
 
-      // persist locally
+      settings = structuredClone(
+        backup.settings || DEFAULT_SETTINGS || {}
+      );
+
+      adminCred = structuredClone(
+        backup.adminCred || MASTER_ADMIN
+      );
+
+      // ==========================================
+      // SAVE TO LOCAL STORAGE
+      // ==========================================
       write(K_USERS, users);
       write(K_QS, questions);
       write(K_RESULTS, results);
       write(K_SETTINGS, settings);
       write(K_ADMIN, adminCred);
 
-      // Persist questions to Firestore in bulk (best-effort)
-      // IMPORTANT: this will write each question doc under collection "questions"
+      // Save complete backup copy
+      localStorage.setItem(
+        "MCQ_System_Full_Backup",
+        JSON.stringify(backup)
+      );
+
+      // ==========================================
+      // FIRESTORE SYNC
+      // ==========================================
       const failList = [];
+
       for (const q of questions) {
         try {
-          // ensure id exists
           if (!q.id) q.id = uid();
-          await saveToFirestore("questions", q.id, q, K_QS);
+
+          await saveToFirestore(
+            "questions",
+            q.id,
+            q,
+            K_QS
+          );
         } catch (err) {
-          console.warn("Failed to save question to Firestore:", q.id, err);
-          failList.push(q.id || JSON.stringify(q).slice(0,40));
+          console.warn(
+            "Failed to save question:",
+            q.id,
+            err
+          );
+
+          failList.push(
+            q.id ||
+            JSON.stringify(q).substring(0, 40)
+          );
         }
       }
 
-      alert(`✅ Full backup restored! Firestore failures: ${failList.length}`);
-      // refresh all admin UI
-      if (typeof renderQuestionsList === "function") renderQuestionsList();
-      if (typeof renderUsersAdmin === "function") renderUsersAdmin();
-      if (typeof renderResults === "function") renderResults();
-      if (typeof renderSettingsAdmin === "function") renderSettingsAdmin();
+      // ==========================================
+      // REFRESH ADMIN UI
+      // ==========================================
+      if (typeof renderQuestionsList === "function")
+        renderQuestionsList();
+
+      if (typeof renderUsersAdmin === "function")
+        renderUsersAdmin();
+
+      if (typeof renderResults === "function")
+        renderResults();
+
+      if (typeof renderSettingsAdmin === "function")
+        renderSettingsAdmin();
+
+      // ==========================================
+      // SUCCESS MESSAGE
+      // ==========================================
+      alert(
+        "✅ Full Backup Restored Successfully!\n\n" +
+        "All previous browser data has been replaced.\n" +
+        "Users: " + users.length + "\n" +
+        "Questions: " + questions.length + "\n" +
+        "Results: " + results.length + "\n\n" +
+        "Firestore Failures: " + failList.length
+      );
+
+      // Reload application
+      setTimeout(() => {
+        location.reload();
+      }, 500);
+
     } catch (err) {
-      alert("❌ Invalid backup file");
       console.error(err);
+
+      alert(
+        "❌ Invalid backup file.\n" +
+        "Please select a valid MCQ_System_Full_Backup.json file."
+      );
     }
   };
+
   reader.readAsText(file);
 }
-window.importFullBackup = importFullBackup;
 
+window.importFullBackup = importFullBackup;
+   
 async function autoLoadBackup() {
+
   const backupFiles = [
     "MCQ_System_Full_Backup.json",
     "MCQ_System_Full_Backup(1).json",
@@ -2925,37 +2979,103 @@ async function autoLoadBackup() {
   ];
 
   for (const file of backupFiles) {
+
     try {
+
       const res = await fetch(file);
 
-      if (res.ok) {
-        const backup = await res.json();
+      if (!res.ok) continue;
 
-        users = backup.users || [];
-        questions = backup.questions || [];
-        results = backup.results || [];
-        settings = backup.settings || {};
-        examConfig = backup.examConfig || {};
+      const backup = await res.json();
 
-        // Save to localStorage
-        localStorage.setItem("users", JSON.stringify(users));
-        localStorage.setItem("questions", JSON.stringify(questions));
-        localStorage.setItem("results", JSON.stringify(results));
-        localStorage.setItem("settings", JSON.stringify(settings));
-        localStorage.setItem("examConfig", JSON.stringify(examConfig));
+      console.log("Found backup:", file);
 
-        console.log("Auto restored from:", file);
+      // ==========================================
+      // REMOVE ALL OLD DATA
+      // ==========================================
+      localStorage.clear();
 
-        if(typeof renderUsers==="function") renderUsers();
-        if(typeof renderQuestions==="function") renderQuestions();
-        if(typeof renderResults==="function") renderResults();
+      users = [];
+      questions = [];
+      results = [];
+      settings = {};
+      examConfig = {};
+      adminCred = MASTER_ADMIN;
 
-        return;
-      }
-    } catch(err) {}
+      // ==========================================
+      // RESTORE BACKUP
+      // ==========================================
+      users = structuredClone(backup.users || []);
+      questions = structuredClone(backup.questions || []);
+      results = structuredClone(backup.results || []);
+
+      settings = structuredClone(
+        backup.settings || DEFAULT_SETTINGS || {}
+      );
+
+      examConfig = structuredClone(
+        backup.examConfig || {}
+      );
+
+      adminCred = structuredClone(
+        backup.adminCred || MASTER_ADMIN
+      );
+
+      // ==========================================
+      // SAVE LOCALLY
+      // ==========================================
+      write(K_USERS, users);
+      write(K_QS, questions);
+      write(K_RESULTS, results);
+      write(K_SETTINGS, settings);
+      write(K_ADMIN, adminCred);
+
+      localStorage.setItem(
+        "examConfig",
+        JSON.stringify(examConfig)
+      );
+
+      localStorage.setItem(
+        "MCQ_System_Full_Backup",
+        JSON.stringify(backup)
+      );
+
+      console.log(
+        `Auto restored from ${file}
+         Users=${users.length}
+         Questions=${questions.length}`
+      );
+
+      // ==========================================
+      // REFRESH UI
+      // ==========================================
+      if (typeof renderUsersAdmin === "function")
+        renderUsersAdmin();
+
+      if (typeof renderQuestionsList === "function")
+        renderQuestionsList();
+
+      if (typeof renderResults === "function")
+        renderResults();
+
+      if (typeof renderSettingsAdmin === "function")
+        renderSettingsAdmin();
+
+      // ==========================================
+      // RELOAD APP
+      // ==========================================
+      setTimeout(() => {
+        location.reload();
+      }, 300);
+
+      return;
+
+    } catch (err) {
+      console.error("Backup load error:", err);
+    }
   }
 
-  console.log("No backup file found");
+  console.log("No MCQ_System_Full_Backup file found");
 }
    
 function updateBackup() {
