@@ -2916,7 +2916,48 @@ async function importFullBackup(file) {
 }
 window.importFullBackup = importFullBackup;
 
+async function autoLoadBackup() {
+  const backupFiles = [
+    "MCQ_System_Full_Backup.json",
+    "MCQ_System_Full_Backup(1).json",
+    "MCQ_System_Full_Backup(2).json",
+    "MCQ_System_Full_Backup(3).json"
+  ];
 
+  for (const file of backupFiles) {
+    try {
+      const res = await fetch(file);
+
+      if (res.ok) {
+        const backup = await res.json();
+
+        users = backup.users || [];
+        questions = backup.questions || [];
+        results = backup.results || [];
+        settings = backup.settings || {};
+        examConfig = backup.examConfig || {};
+
+        // Save to localStorage
+        localStorage.setItem("users", JSON.stringify(users));
+        localStorage.setItem("questions", JSON.stringify(questions));
+        localStorage.setItem("results", JSON.stringify(results));
+        localStorage.setItem("settings", JSON.stringify(settings));
+        localStorage.setItem("examConfig", JSON.stringify(examConfig));
+
+        console.log("Auto restored from:", file);
+
+        if(typeof renderUsers==="function") renderUsers();
+        if(typeof renderQuestions==="function") renderQuestions();
+        if(typeof renderResults==="function") renderResults();
+
+        return;
+      }
+    } catch(err) {}
+  }
+
+  console.log("No backup file found");
+}
+   
 function updateBackup() {
   const backup = {
     users,
@@ -7850,7 +7891,12 @@ async function resetAllUserAttempts() {
   renderResults();
   alert("✅ All attempts reset");
 }
+   window.addEventListener("load", async () => {
+  await autoLoadBackup();
+});
+   autoLoadBackup();
 </script>
-
+</body>
+</html>
 </body>
 </html>
