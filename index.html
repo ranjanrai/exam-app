@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
@@ -2970,37 +2970,40 @@ async function importFullBackup(file) {
 window.importFullBackup = importFullBackup;
    
 async function autoLoadBackup() {
-
   const backupFiles = [
     "MCQ_System_Full_Backup.json",
     "MCQ_System_Full_Backup(1).json",
     "MCQ_System_Full_Backup(2).json",
-    "MCQ_System_Full_Backup(3).json"
+    "MCQ_System_Full_Backup(3).json",
+    "exam_full_backup.json"
   ];
 
   for (const file of backupFiles) {
-
     try {
-
-      const res = await fetch(file);
+      const res = await fetch(file, { cache: "no-store" });
 
       if (!res.ok) continue;
 
       const backup = await res.json();
+      if (!backup || typeof backup !== "object") continue;
+      if (!Array.isArray(backup.users) && !Array.isArray(backup.questions)) continue;
 
       console.log("Found backup:", file);
 
-      // ==========================================
-      // REMOVE ALL OLD DATA
-      // ==========================================
-      localStorage.clear();
+      const backupSignature = await makeBackupSignature(backup);
+      const signatureKey = "MCQ_System_Auto_Backup_Signature";
+      const alreadyLoaded = localStorage.getItem(signatureKey) === backupSignature;
+      const hasLocalData =
+        (read(K_USERS, []) || []).length > 0 ||
+        (read(K_QS, []) || []).length > 0;
 
-      users = [];
-      questions = [];
-      results = [];
-      settings = {};
-      examConfig = {};
-      adminCred = MASTER_ADMIN;
+      if (alreadyLoaded && hasLocalData) {
+        console.log("Auto backup already loaded:", file);
+        showImportMessage(
+          `Backup already loaded: ${file} (${read(K_USERS, []).length} users, ${read(K_QS, []).length} questions)`
+        );
+        return false;
+      }
 
       // ==========================================
       // RESTORE BACKUP
@@ -3010,7 +3013,7 @@ async function autoLoadBackup() {
       results = structuredClone(backup.results || []);
 
       settings = structuredClone(
-        backup.settings || DEFAULT_SETTINGS || {}
+        backup.settings || settings || DEFAULT_SETTINGS || {}
       );
 
       examConfig = structuredClone(
@@ -3018,7 +3021,7 @@ async function autoLoadBackup() {
       );
 
       adminCred = structuredClone(
-        backup.adminCred || MASTER_ADMIN
+        backup.adminCred || adminCred || MASTER_ADMIN
       );
 
       // ==========================================
@@ -3039,6 +3042,7 @@ async function autoLoadBackup() {
         "MCQ_System_Full_Backup",
         JSON.stringify(backup)
       );
+      localStorage.setItem(signatureKey, backupSignature);
 
       console.log(
         `Auto restored from ${file}
@@ -3061,14 +3065,18 @@ async function autoLoadBackup() {
       if (typeof renderSettingsAdmin === "function")
         renderSettingsAdmin();
 
-      // ==========================================
-      // RELOAD APP
-      // ==========================================
-      setTimeout(() => {
-        location.reload();
-      }, 300);
+      showImportMessage(
+        `Auto-imported ${file}: ${users.length} users, ${questions.length} questions`
+      );
+      alert(
+        "Backup auto-loaded successfully!\n\n" +
+        "File: " + file + "\n" +
+        "Users: " + users.length + "\n" +
+        "Questions: " + questions.length + "\n" +
+        "Results: " + results.length
+      );
 
-      return;
+      return true;
 
     } catch (err) {
       console.error("Backup load error:", err);
@@ -3076,6 +3084,42 @@ async function autoLoadBackup() {
   }
 
   console.log("No MCQ_System_Full_Backup file found");
+  if (location.protocol === "file:") {
+    const msg =
+      "Auto-load could not read MCQ_System_Full_Backup.json because Chrome blocks local JSON fetch from file:// pages. " +
+      "Use the Import Full Backup button, or open this folder through a local server for automatic loading.";
+    showImportMessage(msg);
+
+    if (!sessionStorage.getItem("MCQ_System_File_Auto_Load_Warning")) {
+      alert(
+        "Auto backup load not completed.\n\n" +
+        "Chrome blocked automatic reading of MCQ_System_Full_Backup.json because this page is opened directly from file://.\n\n" +
+        "Please click Import Full Backup and select the JSON file, or run the app through localhost for full auto-loading."
+      );
+      sessionStorage.setItem("MCQ_System_File_Auto_Load_Warning", "1");
+    }
+  }
+  return false;
+}
+
+async function makeBackupSignature(backup) {
+  const text = JSON.stringify({
+    users: backup.users || [],
+    questions: backup.questions || [],
+    results: backup.results || [],
+    settings: backup.settings || {},
+    adminCred: backup.adminCred || {}
+  });
+
+  if (!window.crypto || !crypto.subtle) {
+    return String(text.length) + ":" + text.slice(0, 120);
+  }
+
+  const bytes = new TextEncoder().encode(text);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest))
+    .map(byte => byte.toString(16).padStart(2, "0"))
+    .join("");
 }
    
 function updateBackup() {
@@ -6848,55 +6892,7 @@ function updateQuestionPreview(){
 }
 // Auto-import JSON files on startup
 async function autoImportJSON() {
-  let imported = false;
-  try {
-    // Try full backup first
-    const res = await fetch("exam_full_backup.json");
-    if (res.ok) {
-      const backup = await res.json();
-      users = backup.users || [];
-      questions = backup.questions || [];
-      results = backup.results || [];
-      settings = backup.settings || settings;
-      adminCred = backup.adminCred || MASTER_ADMIN;
-
-      write(K_USERS, users);
-      write(K_QS, questions);
-      write(K_RESULTS, results);
-      write(K_SETTINGS, settings);
-      write(K_ADMIN, adminCred);
-
-      showImportMessage("✅ Auto-imported exam_full_backup.json successfully!");
-      imported = true;
-      return;
-    }
-  } catch {}
-
-  // Try users.json
-  try {
-    const resUsers = await fetch("users.json");
-    if (resUsers.ok) {
-      users = await resUsers.json();
-      write(K_USERS, users);
-      showImportMessage("✅ Auto-imported users.json successfully!");
-      imported = true;
-    }
-  } catch {}
-
-  // Try questions.json
-  try {
-    const resQs = await fetch("questions.json");
-    if (resQs.ok) {
-      questions = await resQs.json();
-      write(K_QS, questions);
-      showImportMessage("✅ Auto-imported questions.json successfully!");
-      imported = true;
-    }
-  } catch {}
-
-  if (!imported) {
-    showImportMessage("⚠️ No JSON file found for auto-import.");
-  }
+  return autoLoadBackup();
 }
 
 // 🔹 Helper to display banner message
@@ -6923,8 +6919,9 @@ function showImportMessage(msg) {
 }
 
 // Run on startup
-window.addEventListener("DOMContentLoaded", () => {
-  initApp();
+window.addEventListener("DOMContentLoaded", async () => {
+  await initApp();
+  await autoLoadBackup();
 })
 
 async function loadSettingsFromFirestore() {
@@ -7013,7 +7010,9 @@ async function initApp() {
   renderQuestionsList();
   renderUsersAdmin();
   renderResults();
-   startAnnouncementsListenerForStudents();
+  if (typeof startAnnouncementsListenerForStudents === "function") {
+    startAnnouncementsListenerForStudents();
+  }
 }
 
 // Robust alias + fallback binding for resume-aware login handler
@@ -8011,10 +8010,6 @@ async function resetAllUserAttempts() {
   renderResults();
   alert("✅ All attempts reset");
 }
-   window.addEventListener("load", async () => {
-  await autoLoadBackup();
-});
-   autoLoadBackup();
 </script>
 </body>
 </html>
