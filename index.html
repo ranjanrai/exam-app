@@ -2267,6 +2267,9 @@ html.light body { color: var(--text); }
 <label style="margin-top:8px">
   <input type="checkbox" id="adminShowQuestionAnswerKey"> Show right and wrong answers in admin question list
 </label>
+<label style="margin-top:8px">
+  <input type="checkbox" id="adminShowSubmitAnswerReview"> Show right and wrong question review after student exam submission
+</label>
  <label>Total Question</label>
 <input id="adminTotalQs" type="number" min="1" value="10" placeholder="e.g. Total Question"/>
      <label>Total Duration</label>
@@ -2798,6 +2801,7 @@ let settings = read(K_SETTINGS, {
   maxResumes: 2,
   showPublicImportBackup: true,
   showQuestionAnswerKey: false,
+  showSubmitAnswerReview: false,
   logo: "",            // ✅ no default logo
   author: "",          // ✅ blank
   college: "",         // ✅ blank
@@ -2826,6 +2830,7 @@ function normalizeExamSettings() {
   settings.maxResumes = getConfiguredMaxResumes();
   settings.showPublicImportBackup = settings.showPublicImportBackup !== false;
   settings.showQuestionAnswerKey = settings.showQuestionAnswerKey === true;
+  settings.showSubmitAnswerReview = settings.showSubmitAnswerReview === true;
   if (!settings.counts || typeof settings.counts !== "object") {
     settings.counts = { Synopsis: 0, "Minor Practical": 0, "Major Practical": 0, Viva: 0 };
   }
@@ -4109,6 +4114,47 @@ function toggleFlag(){ const q = EXAM.paper[EXAM.cur]; if(!q) return; EXAM.state
 
 function updateProgress(){ const answered = Object.keys(EXAM.state.answers).length; const total = EXAM.paper.length; const pct = Math.round((answered/total) * 100); $('#fsProgressFill').style.width = pct + '%'; }
 
+function buildPostSubmitAnswerReview(paper, answers) {
+  if (!settings || settings.showSubmitAnswerReview !== true) return "";
+  if (!Array.isArray(paper) || paper.length === 0) return "";
+
+  const labels = ["A", "B", "C", "D"];
+  const rows = paper.map((q, index) => {
+    const correctIndex = Number.isFinite(Number(q.answer)) ? Number(q.answer) : 0;
+    const chosen = answers ? answers[q.id] : undefined;
+    const isAnswered = chosen !== undefined && chosen !== null;
+    const isRight = isAnswered && Number(chosen) === correctIndex;
+    const chosenText = isAnswered
+      ? `${labels[chosen] || "-"} ) ${escapeHTML(q.options?.[chosen] || "")}`
+      : "Not answered";
+    const correctText = `${labels[correctIndex] || "A"} ) ${escapeHTML(q.options?.[correctIndex] || "")}`;
+    const wrongOptions = (q.options || [])
+      .map((option, optionIndex) => ({ option, optionIndex }))
+      .filter(item => item.optionIndex !== correctIndex)
+      .map(item => `${labels[item.optionIndex]} ) ${escapeHTML(item.option || "")}`)
+      .join(" | ");
+    const status = isRight ? "Right" : (isAnswered ? "Wrong" : "Unanswered");
+    const statusColor = isRight ? "#86efac" : "#fca5a5";
+
+    return `
+      <div style="border:1px solid rgba(255,255,255,.18);border-radius:10px;padding:10px;margin-top:10px;text-align:left;background:rgba(15,23,42,.74)">
+        <div style="font-weight:800;color:#e5e7eb">${index + 1}. ${escapeHTML(q.question || "")}</div>
+        <div style="margin-top:6px;color:${statusColor};font-weight:800">Status: ${status}</div>
+        <div style="margin-top:4px;color:#dbeafe">Your answer: ${chosenText}</div>
+        <div style="margin-top:4px;color:#bbf7d0">Right answer: ${correctText}</div>
+        <div style="margin-top:4px;color:#fecaca">Wrong options: ${wrongOptions || "-"}</div>
+      </div>
+    `;
+  }).join("");
+
+  return `
+    <div style="margin-top:18px;text-align:left;max-height:320px;overflow:auto">
+      <h3 style="margin:0 0 8px;text-align:center">Question Review</h3>
+      ${rows}
+    </div>
+  `;
+}
+
 /* NEW: Question navigator */
 function renderQuestionNav(){
   const nav = document.getElementById('questionNav');
@@ -4528,12 +4574,14 @@ await downloadEncryptedJSON(`${EXAM.state.username}_result_encrypted.json`, resu
   EXAM.state.submitted = true;
   const examInner = document.getElementById('examInner');
   if (examInner) examInner.classList.add('exam-submitted');
+  const answerReviewHTML = buildPostSubmitAnswerReview(paper, EXAM.state.answers);
 
   // ==== SHOW SCORE ====
   document.getElementById('fsQuestion').innerHTML = `
     <div style="text-align:center;font-size:22px;font-weight:900;">
       Your Score: ${percent}%
     </div>
+    ${answerReviewHTML}
     <div id="redirectMsg"
          style="text-align:center;margin-top:12px;font-size:14px;color:var(--muted)"></div>
   `;
@@ -6103,6 +6151,7 @@ async function saveExamSettings() {
   const allowAfterTime = $('#adminAllowAfterTime').checked;
   const showPublicImportBackup = document.getElementById('adminShowPublicImportBackup')?.checked !== false;
   const showQuestionAnswerKey = document.getElementById('adminShowQuestionAnswerKey')?.checked === true;
+  const showSubmitAnswerReview = document.getElementById('adminShowSubmitAnswerReview')?.checked === true;
 
   const logoFile = document.getElementById('adminLogo').files[0];
   const logo = logoFile ? await toDataURL(logoFile) : (settings.logo || "");
@@ -6119,6 +6168,7 @@ async function saveExamSettings() {
     allowAfterTime,
     showPublicImportBackup,
     showQuestionAnswerKey,
+    showSubmitAnswerReview,
     logo,
     author: document.getElementById('adminAuthor').value || "",
     college: document.getElementById('adminCollege').value || "",
@@ -6168,6 +6218,7 @@ function renderSettingsAdmin() {
       allowAfterTime: false,
       showPublicImportBackup: true,
       showQuestionAnswerKey: false,
+      showSubmitAnswerReview: false,
       logo: "",
       author: "",
       college: "",
@@ -6190,6 +6241,8 @@ function renderSettingsAdmin() {
   if (showImportEl) showImportEl.checked = settings.showPublicImportBackup !== false;
   const showAnswerKeyEl = document.getElementById('adminShowQuestionAnswerKey');
   if (showAnswerKeyEl) showAnswerKeyEl.checked = settings.showQuestionAnswerKey === true;
+  const showSubmitReviewEl = document.getElementById('adminShowSubmitAnswerReview');
+  if (showSubmitReviewEl) showSubmitReviewEl.checked = settings.showSubmitAnswerReview === true;
 
   // resume UI
   const resumeEl = document.getElementById('adminResumeEnabled');
@@ -6264,6 +6317,7 @@ function renderExamHeader() {
         allowAfterTime: false,
         showPublicImportBackup: true,
         showQuestionAnswerKey: false,
+        showSubmitAnswerReview: false,
         logo: "",
         author: "",
         college: "",
@@ -6559,6 +6613,7 @@ function importSettingsFile(e) {
   allowAfterTime: obj.allowAfterTime ?? settings.allowAfterTime ?? false,
   showPublicImportBackup: obj.showPublicImportBackup ?? settings.showPublicImportBackup ?? true,
   showQuestionAnswerKey: obj.showQuestionAnswerKey ?? settings.showQuestionAnswerKey ?? false,
+  showSubmitAnswerReview: obj.showSubmitAnswerReview ?? settings.showSubmitAnswerReview ?? false,
   logo: obj.logo ?? settings.logo ?? "",
   author: obj.author ?? settings.author ?? "",
   college: obj.college ?? settings.college ?? "",
