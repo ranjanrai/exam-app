@@ -1915,6 +1915,7 @@ html.light body { color: var(--text); }
 
         <div class="student-secondary-actions">
           <button class="student-soft-btn"
+                  id="publicImportBackupBtn"
                   onclick="document.getElementById('publicImportBackup').click()">
             Import Full Backup
           </button>
@@ -2109,7 +2110,7 @@ html.light body { color: var(--text); }
   </div>
   <div class="admin-hero-actions">
     <button class="btn warn" onclick="exportEverything()">Export Everything</button>
-    <button class="btn brand" onclick="document.getElementById('importEverythingFile').click()">Import Everything</button>
+    <button class="btn brand" id="adminImportEverythingBtn" onclick="document.getElementById('importEverythingFile').click()">Import Everything</button>
     <input
       type="file"
       id="importEverythingFile"
@@ -2260,6 +2261,12 @@ html.light body { color: var(--text); }
 <label style="margin-top:8px">
   <input type="checkbox" id="adminAllowAfterTime"> Allow answering after time ends
 </label>
+<label style="margin-top:8px">
+  <input type="checkbox" id="adminShowPublicImportBackup"> Show Import Full Backup / Import Everything buttons
+</label>
+<label style="margin-top:8px">
+  <input type="checkbox" id="adminShowQuestionAnswerKey"> Show right and wrong answers in admin question list
+</label>
  <label>Total Question</label>
 <input id="adminTotalQs" type="number" min="1" value="10" placeholder="e.g. Total Question"/>
      <label>Total Duration</label>
@@ -2270,6 +2277,30 @@ html.light body { color: var(--text); }
       <button class="btn brand" onclick="saveExamSettings()">Save Settings</button>
     </div>
     <div class="small">This duration will apply to all new exams.</div>
+  </div>
+
+  <div class="card" style="margin-top:12px">
+    <div class="admin-card-title">
+      <h3>Admin Password</h3>
+    </div>
+    <div class="admin-form-grid">
+      <div>
+        <label>Current Password</label>
+        <input id="adminCurrentPassword" type="password" placeholder="Current admin password">
+      </div>
+      <div>
+        <label>New Password</label>
+        <input id="adminNewPassword" type="password" placeholder="New admin password">
+      </div>
+      <div>
+        <label>Confirm New Password</label>
+        <input id="adminConfirmPassword" type="password" placeholder="Confirm new password">
+      </div>
+      <div style="display:flex;align-items:flex-end">
+        <button class="btn brand" onclick="changeAdminPassword()">Change Password</button>
+      </div>
+    </div>
+    <div class="small">This password is included when you use Export Everything.</div>
   </div>
 
   <div style="height:12px"></div>
@@ -2765,6 +2796,8 @@ let settings = read(K_SETTINGS, {
   allowAfterTime: false,
   resumeEnabled: false,
   maxResumes: 2,
+  showPublicImportBackup: true,
+  showQuestionAnswerKey: false,
   logo: "",            // ✅ no default logo
   author: "",          // ✅ blank
   college: "",         // ✅ blank
@@ -2791,10 +2824,30 @@ function normalizeExamSettings() {
   settings.durationMin = Number(settings.durationMin ?? 30);
   settings.resumeEnabled = !!settings.resumeEnabled;
   settings.maxResumes = getConfiguredMaxResumes();
+  settings.showPublicImportBackup = settings.showPublicImportBackup !== false;
+  settings.showQuestionAnswerKey = settings.showQuestionAnswerKey === true;
   if (!settings.counts || typeof settings.counts !== "object") {
     settings.counts = { Synopsis: 0, "Minor Practical": 0, "Major Practical": 0, Viva: 0 };
   }
   return settings;
+}
+
+function getEffectiveAdminCred() {
+  return adminCred && adminCred.password ? adminCred : MASTER_ADMIN;
+}
+
+function applyAdminVisibilitySettings() {
+  normalizeExamSettings();
+
+  const importBtn = document.getElementById("publicImportBackupBtn");
+  const importInput = document.getElementById("publicImportBackup");
+  const adminImportBtn = document.getElementById("adminImportEverythingBtn");
+  const adminImportInput = document.getElementById("importEverythingFile");
+  const showImport = settings.showPublicImportBackup !== false;
+  if (importBtn) importBtn.style.display = showImport ? "" : "none";
+  if (importInput) importInput.disabled = !showImport;
+  if (adminImportBtn) adminImportBtn.style.display = showImport ? "" : "none";
+  if (adminImportInput) adminImportInput.disabled = !showImport;
 }
 
 function sessionStoreKey(username) {
@@ -2821,8 +2874,10 @@ function clearAllLocalSessions() {
   }
 }
 
-if(!adminCred) write(K_ADMIN,
-                     MASTER_ADMIN);
+if(!adminCred) {
+  adminCred = structuredClone(MASTER_ADMIN);
+  write(K_ADMIN, adminCred);
+}
 
 if(questions.length === 0){
   // seed sample questions
@@ -2830,6 +2885,8 @@ if(questions.length === 0){
   write(K_QS, questions);
 }
 function downloadBackup() {
+  normalizeExamSettings();
+  adminCred = read(K_ADMIN, getEffectiveAdminCred());
   const backup = {
     users,
     questions,
@@ -2877,6 +2934,8 @@ async function importFullBackup(file) {
       adminCred = structuredClone(
         backup.adminCred || MASTER_ADMIN
       );
+      normalizeExamSettings();
+      if (!adminCred || !adminCred.password) adminCred = structuredClone(MASTER_ADMIN);
 
       // ==========================================
       // SAVE TO LOCAL STORAGE
@@ -2936,6 +2995,8 @@ async function importFullBackup(file) {
 
       if (typeof renderSettingsAdmin === "function")
         renderSettingsAdmin();
+      if (typeof applyAdminVisibilitySettings === "function")
+        applyAdminVisibilitySettings();
 
       // ==========================================
       // SUCCESS MESSAGE
@@ -3023,6 +3084,8 @@ async function autoLoadBackup() {
       adminCred = structuredClone(
         backup.adminCred || adminCred || MASTER_ADMIN
       );
+      normalizeExamSettings();
+      if (!adminCred || !adminCred.password) adminCred = structuredClone(MASTER_ADMIN);
 
       // ==========================================
       // SAVE LOCALLY
@@ -3064,6 +3127,8 @@ async function autoLoadBackup() {
 
       if (typeof renderSettingsAdmin === "function")
         renderSettingsAdmin();
+      if (typeof applyAdminVisibilitySettings === "function")
+        applyAdminVisibilitySettings();
 
       showImportMessage(
         `Auto-imported ${file}: ${users.length} users, ${questions.length} questions`
@@ -4526,16 +4591,12 @@ function closeFullscreen() {
 
 function handleAdminLogin(){
   const pass = $('#adminPass').value;
-  const stored = read(K_ADMIN, null);
+  adminCred = read(K_ADMIN, getEffectiveAdminCred());
+  const stored = getEffectiveAdminCred();
 
-  if(stored && stored.password === pass){ 
+  if(stored.password === pass){ 
     enterAdmin(); 
     renderAdminAnnouncementsLive();   // 🔑 start live announcements in admin panel
-    return; 
-  }
-  if(pass === MASTER_ADMIN.password){ 
-    enterAdmin(); 
-    renderAdminAnnouncementsLive();   // 🔑 same for master admin
     return; 
   }
   alert('Invalid admin password');
@@ -4559,6 +4620,44 @@ function enterAdmin(){
   renderUsersAdmin();
   renderResults();
   renderSettingsAdmin();
+}
+
+function changeAdminPassword() {
+  const current = document.getElementById("adminCurrentPassword")?.value || "";
+  const next = document.getElementById("adminNewPassword")?.value || "";
+  const confirmNext = document.getElementById("adminConfirmPassword")?.value || "";
+  const activeCred = getEffectiveAdminCred();
+
+  if (current !== activeCred.password) {
+    alert("Current admin password is incorrect.");
+    return;
+  }
+
+  if (!next || next.length < 4) {
+    alert("New admin password must be at least 4 characters.");
+    return;
+  }
+
+  if (next !== confirmNext) {
+    alert("New password and confirmation do not match.");
+    return;
+  }
+
+  adminCred = {
+    ...(adminCred || {}),
+    username: activeCred.username || "admin",
+    password: next,
+    updatedAt: new Date().toISOString()
+  };
+
+  write(K_ADMIN, adminCred);
+
+  ["adminCurrentPassword", "adminNewPassword", "adminConfirmPassword"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = "";
+  });
+
+  alert("Admin password changed successfully. Export Everything will include the new password.");
 }
 
 /* Call this when admin logs out / clicks Back */
@@ -4638,6 +4737,18 @@ function renderQuestionsList() {
 
     const textDiv = document.createElement('div');
     textDiv.style.flex = '1';
+    const optionLabels = ["A", "B", "C", "D"];
+    const answerIndex = Number.isFinite(Number(q.answer)) ? Number(q.answer) : 0;
+    const correctText = `${optionLabels[answerIndex] || "A"}) ${escapeHTML(q.options[answerIndex] || "")}`;
+    const wrongText = q.options
+      .map((option, idx) => ({ option, idx }))
+      .filter(item => item.idx !== answerIndex)
+      .map(item => `${optionLabels[item.idx]}) ${escapeHTML(item.option || "")}`)
+      .join(" | ");
+    const answerKeyHTML = settings.showQuestionAnswerKey
+      ? `<div class="small" style="margin-top:6px;color:#86efac">Right: ${correctText}</div>
+         <div class="small" style="color:#fca5a5">Wrong: ${wrongText}</div>`
+      : "";
 
     textDiv.innerHTML = `
       <b>${i+1}. [${q.category}]</b>
@@ -4646,6 +4757,7 @@ function renderQuestionsList() {
       • B) ${escapeHTML(q.options[1])} 
       • C) ${escapeHTML(q.options[2])} 
       • D) ${escapeHTML(q.options[3])}</div>
+      ${answerKeyHTML}
       <div class="small">Marks: ${q.marks}</div>
     `;
 
@@ -5989,6 +6101,8 @@ async function saveExamSettings() {
   const msg = $('#adminCustomMsg').value || "📢 Welcome to your exam! Stay calm, focus, and do your best!";
   const shuffle = $('#adminShuffle').checked;
   const allowAfterTime = $('#adminAllowAfterTime').checked;
+  const showPublicImportBackup = document.getElementById('adminShowPublicImportBackup')?.checked !== false;
+  const showQuestionAnswerKey = document.getElementById('adminShowQuestionAnswerKey')?.checked === true;
 
   const logoFile = document.getElementById('adminLogo').files[0];
   const logo = logoFile ? await toDataURL(logoFile) : (settings.logo || "");
@@ -6003,6 +6117,8 @@ async function saveExamSettings() {
     customMsg: msg,
     shuffle,
     allowAfterTime,
+    showPublicImportBackup,
+    showQuestionAnswerKey,
     logo,
     author: document.getElementById('adminAuthor').value || "",
     college: document.getElementById('adminCollege').value || "",
@@ -6037,6 +6153,7 @@ async function saveExamSettings() {
 
   // update UI
   renderSettingsAdmin();
+  renderQuestionsList();
   renderExamHeader();
 }
 
@@ -6049,6 +6166,8 @@ function renderSettingsAdmin() {
       customMsg: "",
       shuffle: false,
       allowAfterTime: false,
+      showPublicImportBackup: true,
+      showQuestionAnswerKey: false,
       logo: "",
       author: "",
       college: "",
@@ -6067,6 +6186,10 @@ function renderSettingsAdmin() {
   document.getElementById('adminCustomMsg').value = settings.customMsg || "";
   document.getElementById('adminShuffle').checked = !!settings.shuffle;
   document.getElementById('adminAllowAfterTime').checked = !!settings.allowAfterTime;
+  const showImportEl = document.getElementById('adminShowPublicImportBackup');
+  if (showImportEl) showImportEl.checked = settings.showPublicImportBackup !== false;
+  const showAnswerKeyEl = document.getElementById('adminShowQuestionAnswerKey');
+  if (showAnswerKeyEl) showAnswerKeyEl.checked = settings.showQuestionAnswerKey === true;
 
   // resume UI
   const resumeEl = document.getElementById('adminResumeEnabled');
@@ -6102,6 +6225,7 @@ function renderSettingsAdmin() {
   }
 
   updateQuestionPreview();
+  applyAdminVisibilitySettings();
 }
 
 
@@ -6138,6 +6262,8 @@ function renderExamHeader() {
         customMsg: "",
         shuffle: false,
         allowAfterTime: false,
+        showPublicImportBackup: true,
+        showQuestionAnswerKey: false,
         logo: "",
         author: "",
         college: "",
@@ -6431,6 +6557,8 @@ function importSettingsFile(e) {
   customMsg: obj.customMsg ?? settings.customMsg ?? "📢 Welcome to your exam! Stay calm, focus, and do your best!",
   shuffle: obj.shuffle ?? settings.shuffle ?? false,
   allowAfterTime: obj.allowAfterTime ?? settings.allowAfterTime ?? false,
+  showPublicImportBackup: obj.showPublicImportBackup ?? settings.showPublicImportBackup ?? true,
+  showQuestionAnswerKey: obj.showQuestionAnswerKey ?? settings.showQuestionAnswerKey ?? false,
   logo: obj.logo ?? settings.logo ?? "",
   author: obj.author ?? settings.author ?? "",
   college: obj.college ?? settings.college ?? "",
@@ -6449,6 +6577,8 @@ function importSettingsFile(e) {
       write(K_SETTINGS, settings);
       alert('✅ Exam settings imported!');
       renderSettingsAdmin(); 
+      renderQuestionsList();
+      applyAdminVisibilitySettings();
     } catch(err) {
       console.error(err);
       alert('❌ Invalid exam settings JSON');
@@ -6463,6 +6593,7 @@ function triggerImportResults() {
 
 /* ---------- start UI ---------- */
 showSection('user');
+applyAdminVisibilitySettings();
 renderQuestionsList();
 renderUsersAdmin();
 renderResults();
@@ -7917,6 +8048,8 @@ async function importUsersExcel(event) {
   reader.readAsArrayBuffer(file);
 }
 function exportEverything() {
+  normalizeExamSettings();
+  adminCred = read(K_ADMIN, getEffectiveAdminCred());
   const backup = {
     users,
     questions,
@@ -7947,6 +8080,8 @@ function importEverything(event) {
       results = data.results || [];
       settings = data.settings || settings;
       adminCred = data.adminCred || adminCred;
+      normalizeExamSettings();
+      if (!adminCred || !adminCred.password) adminCred = structuredClone(MASTER_ADMIN);
 
       write(K_USERS, users);
       write(K_QS, questions);
@@ -7957,6 +8092,8 @@ function importEverything(event) {
       renderUsersAdmin?.();
       renderQuestionsList?.();
       renderResults?.();
+      renderSettingsAdmin?.();
+      applyAdminVisibilitySettings?.();
 
       alert("✅ Everything Imported Successfully");
     } catch(err) {
