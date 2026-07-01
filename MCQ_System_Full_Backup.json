@@ -167,6 +167,12 @@
       "fullName": "demo000",
       "password": "123",
       "photo": ""
+    },
+    {
+      "username": "dem",
+      "fullName": "dem",
+      "password": "1",
+      "photo": ""
     }
   ],
   "questions": [
@@ -823,23 +829,26 @@
   ],
   "results": [],
   "settings": {
-    "durationMin": 60,
+    "durationMin": 30,
     "customMsg": "📢 Welcome to your exam! Stay calm, focus, and do your best!",
     "shuffle": true,
-    "allowAfterTime": true,
+    "allowAfterTime": false,
+    "showPublicImportBackup": false,
+    "showQuestionAnswerKey": true,
+    "showSubmitAnswerReview": true,
     "logo": "",
     "author": "",
     "college": "REGIONAL COLLEGE OF PHARMACEUTICAL SCIENCES",
     "subject": "COMPUTER APPLICATIONS IN PHARMACY",
     "subjectCode": "BP210P",
-    "fullMarks": 40,
+    "fullMarks": 30,
     "resumeEnabled": true,
     "maxResumes": 1,
     "counts": {
-      "Synopsis": 10,
-      "Minor Practical": 10,
-      "Major Practical": 1,
-      "Viva": 5
+      "Synopsis": 30,
+      "Minor Practical": 0,
+      "Major Practical": 0,
+      "Viva": 0
     }
   },
   "adminCred": {
