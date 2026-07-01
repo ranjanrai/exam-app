@@ -1629,6 +1629,309 @@ html.light body { color: var(--text); }
   }
 }
 
+/* Polished post-submit result screen */
+#examInner.exam-submitted {
+  width: min(1040px, calc(100vw - 28px)) !important;
+  max-height: calc(100vh - 80px) !important;
+  display: block !important;
+  padding: clamp(14px, 2.4vw, 26px) !important;
+  overflow: auto !important;
+  border: 1px solid rgba(148, 163, 184, 0.28) !important;
+  background:
+    linear-gradient(135deg, rgba(14, 165, 233, 0.16), rgba(16, 185, 129, 0.12)),
+    linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(2, 6, 23, 0.96)) !important;
+}
+
+#examInner.exam-submitted #fsUser,
+#examInner.exam-submitted #fsOptions,
+#examInner.exam-submitted .fsFooter {
+  display: none !important;
+}
+
+#examInner.exam-submitted #fsMain {
+  width: 100% !important;
+  max-height: none !important;
+  min-width: 0 !important;
+}
+
+#examInner.exam-submitted #fsQuestion {
+  max-height: none !important;
+  overflow: visible !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.result-page {
+  color: #e5f2ff;
+}
+
+.result-hero {
+  display: grid;
+  grid-template-columns: minmax(220px, 310px) minmax(0, 1fr);
+  gap: clamp(16px, 2.5vw, 28px);
+  align-items: stretch;
+}
+
+.result-score-card,
+.result-detail-card,
+.result-review {
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.032)),
+    rgba(15, 23, 42, 0.72);
+  border-radius: 18px;
+  box-shadow: 0 20px 52px rgba(0, 0, 0, 0.34);
+}
+
+.result-score-card {
+  padding: clamp(18px, 3vw, 26px);
+  display: grid;
+  place-items: center;
+  text-align: center;
+}
+
+.result-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(34, 197, 94, 0.12);
+  color: #bbf7d0;
+  border: 1px solid rgba(74, 222, 128, 0.35);
+  font-weight: 800;
+  font-size: 13px;
+}
+
+.result-ring {
+  --score: 0%;
+  width: clamp(150px, 19vw, 210px);
+  aspect-ratio: 1;
+  margin: 18px auto 14px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(circle at center, #0f172a 0 58%, transparent 59%),
+    conic-gradient(#5eead4 var(--score), rgba(148, 163, 184, 0.24) 0);
+  box-shadow: 0 0 0 10px rgba(14, 165, 233, 0.08), inset 0 0 36px rgba(94, 234, 212, 0.12);
+}
+
+.result-percent {
+  font-size: clamp(38px, 7vw, 64px);
+  font-weight: 950;
+  line-height: 1;
+}
+
+.result-score-subtitle {
+  color: #cbd5e1;
+  font-weight: 700;
+}
+
+.result-detail-card {
+  padding: clamp(18px, 3vw, 28px);
+}
+
+.result-title {
+  margin: 0;
+  font-size: clamp(24px, 4vw, 42px);
+  line-height: 1.08;
+  letter-spacing: 0;
+}
+
+.result-copy {
+  margin: 10px 0 0;
+  color: #cbd5e1;
+  font-size: clamp(14px, 1.7vw, 17px);
+  line-height: 1.55;
+}
+
+.result-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.result-stat {
+  min-height: 72px;
+  padding: 12px;
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.72);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.result-stat strong {
+  display: block;
+  font-size: 22px;
+  color: #f8fafc;
+}
+
+.result-stat span {
+  display: block;
+  margin-top: 3px;
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.result-progress {
+  height: 14px;
+  margin-top: 18px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(148, 163, 184, 0.18);
+}
+
+.result-progress > div {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #818cf8, #5eead4, #86efac);
+}
+
+.result-section-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.result-section {
+  padding: 11px;
+  border-radius: 14px;
+  background: rgba(8, 13, 28, 0.64);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+}
+
+.result-section span {
+  display: block;
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.result-section strong {
+  display: block;
+  margin-top: 4px;
+  color: #e0f2fe;
+  font-size: 19px;
+}
+
+.result-review {
+  margin-top: 18px;
+  padding: clamp(14px, 2.5vw, 22px);
+}
+
+.result-review h3 {
+  margin: 0 0 12px;
+  text-align: left;
+}
+
+.result-review-list {
+  display: grid;
+  gap: 10px;
+  max-height: 360px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.result-review-item {
+  padding: 12px;
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.78);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  text-align: left;
+}
+
+.result-review-question {
+  color: #f8fafc;
+  font-weight: 850;
+  line-height: 1.35;
+}
+
+.result-review-meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.result-pill {
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(30, 41, 59, 0.72);
+  color: #cbd5e1;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.result-pill strong {
+  display: block;
+  margin-bottom: 3px;
+  color: #f8fafc;
+}
+
+.result-pill.right strong { color: #86efac; }
+.result-pill.wrong strong { color: #fca5a5; }
+.result-pill.neutral strong { color: #bfdbfe; }
+
+.result-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 18px;
+}
+
+.result-primary-action {
+  border: 0;
+  border-radius: 14px;
+  padding: 13px 24px;
+  min-width: 190px;
+  color: #04111f;
+  background: linear-gradient(90deg, #99f6e4, #60a5fa);
+  font-weight: 950;
+  cursor: pointer;
+  box-shadow: 0 16px 34px rgba(37, 99, 235, 0.28);
+}
+
+@media (max-width: 760px) {
+  #examInner.exam-submitted {
+    width: calc(100vw - 18px) !important;
+    max-height: calc(100vh - 56px) !important;
+    padding: 10px !important;
+    border-radius: 16px !important;
+  }
+
+  .result-hero,
+  .result-stats-grid,
+  .result-section-grid,
+  .result-review-meta {
+    grid-template-columns: 1fr;
+  }
+
+  .result-score-card,
+  .result-detail-card,
+  .result-review {
+    border-radius: 14px;
+  }
+
+  .result-ring {
+    width: min(58vw, 176px);
+  }
+
+  .result-review-list {
+    max-height: none;
+    overflow: visible;
+  }
+
+  .result-primary-action {
+    width: 100%;
+  }
+}
+
 .admin-workspace {
   padding: 24px 0 10px;
 }
@@ -4125,32 +4428,45 @@ function buildPostSubmitAnswerReview(paper, answers) {
     const isAnswered = chosen !== undefined && chosen !== null;
     const isRight = isAnswered && Number(chosen) === correctIndex;
     const chosenText = isAnswered
-      ? `${labels[chosen] || "-"} ) ${escapeHTML(q.options?.[chosen] || "")}`
+      ? `${labels[chosen] || "-"}: ${escapeHTML(q.options?.[chosen] || "")}`
       : "Not answered";
-    const correctText = `${labels[correctIndex] || "A"} ) ${escapeHTML(q.options?.[correctIndex] || "")}`;
+    const correctText = `${labels[correctIndex] || "A"}: ${escapeHTML(q.options?.[correctIndex] || "")}`;
     const wrongOptions = (q.options || [])
       .map((option, optionIndex) => ({ option, optionIndex }))
       .filter(item => item.optionIndex !== correctIndex)
-      .map(item => `${labels[item.optionIndex]} ) ${escapeHTML(item.option || "")}`)
+      .map(item => `${labels[item.optionIndex]}: ${escapeHTML(item.option || "")}`)
       .join(" | ");
     const status = isRight ? "Right" : (isAnswered ? "Wrong" : "Unanswered");
-    const statusColor = isRight ? "#86efac" : "#fca5a5";
 
     return `
-      <div style="border:1px solid rgba(255,255,255,.18);border-radius:10px;padding:10px;margin-top:10px;text-align:left;background:rgba(15,23,42,.74)">
-        <div style="font-weight:800;color:#e5e7eb">${index + 1}. ${escapeHTML(q.question || "")}</div>
-        <div style="margin-top:6px;color:${statusColor};font-weight:800">Status: ${status}</div>
-        <div style="margin-top:4px;color:#dbeafe">Your answer: ${chosenText}</div>
-        <div style="margin-top:4px;color:#bbf7d0">Right answer: ${correctText}</div>
-        <div style="margin-top:4px;color:#fecaca">Wrong options: ${wrongOptions || "-"}</div>
+      <div class="result-review-item">
+        <div class="result-review-question">${index + 1}. ${escapeHTML(q.question || "")}</div>
+        <div class="result-review-meta">
+          <div class="result-pill ${isRight ? "right" : "wrong"}">
+            <strong>Status</strong>
+            ${status}
+          </div>
+          <div class="result-pill neutral">
+            <strong>Your Answer</strong>
+            ${chosenText}
+          </div>
+          <div class="result-pill right">
+            <strong>Right Answer</strong>
+            ${correctText}
+          </div>
+        </div>
+        <div class="result-pill wrong" style="margin-top:8px">
+          <strong>Wrong Options</strong>
+          ${wrongOptions || "-"}
+        </div>
       </div>
     `;
   }).join("");
 
   return `
-    <div style="margin-top:18px;text-align:left;max-height:320px;overflow:auto">
-      <h3 style="margin:0 0 8px;text-align:center">Question Review</h3>
-      ${rows}
+    <div class="result-review">
+      <h3>Question Review</h3>
+      <div class="result-review-list">${rows}</div>
     </div>
   `;
 }
@@ -4575,22 +4891,63 @@ await downloadEncryptedJSON(`${EXAM.state.username}_result_encrypted.json`, resu
   const examInner = document.getElementById('examInner');
   if (examInner) examInner.classList.add('exam-submitted');
   const answerReviewHTML = buildPostSubmitAnswerReview(paper, EXAM.state.answers);
+  const answeredCount = Object.keys(EXAM.state.answers || {}).length;
+  const notAnsweredCount = Math.max(0, paper.length - answeredCount);
+  const resultTitle = percent >= 80 ? "Excellent work" : (percent >= 50 ? "Exam submitted" : "Keep practicing");
+  const resultBadge = percent >= 80 ? "High Score" : (percent >= 50 ? "Submitted Successfully" : "Needs Improvement");
+  const sectionHTML = ["Synopsis", "Minor Practical", "Major Practical", "Viva"].map(name => `
+    <div class="result-section">
+      <span>${name}</span>
+      <strong>${sectionScores[name] || 0}</strong>
+    </div>
+  `).join("");
 
   // ==== SHOW SCORE ====
   document.getElementById('fsQuestion').innerHTML = `
-    <div style="text-align:center;font-size:22px;font-weight:900;">
-      Your Score: ${percent}%
+    <div class="result-page">
+      <div class="result-hero">
+        <div class="result-score-card">
+          <div class="result-badge">${resultBadge}</div>
+          <div class="result-ring" style="--score:${percent}%">
+            <div>
+              <div class="result-percent">${percent}%</div>
+              <div class="result-score-subtitle">Final Score</div>
+            </div>
+          </div>
+          <div class="result-score-subtitle">${earned} of ${totalMarks} marks</div>
+        </div>
+
+        <div class="result-detail-card">
+          <h2 class="result-title">${resultTitle}</h2>
+          <p class="result-copy">Your exam has been submitted and your encrypted result file has been generated.</p>
+
+          <div class="result-stats-grid">
+            <div class="result-stat">
+              <strong>${paper.length}</strong>
+              <span>Total Questions</span>
+            </div>
+            <div class="result-stat">
+              <strong>${answeredCount}</strong>
+              <span>Answered</span>
+            </div>
+            <div class="result-stat">
+              <strong>${notAnsweredCount}</strong>
+              <span>Not Answered</span>
+            </div>
+          </div>
+
+          <div class="result-progress"><div style="width:${percent}%"></div></div>
+          <div class="result-section-grid">${sectionHTML}</div>
+        </div>
+      </div>
+
+      ${answerReviewHTML}
+
+      <div id="redirectMsg" class="result-actions"></div>
     </div>
-    ${answerReviewHTML}
-    <div id="redirectMsg"
-         style="text-align:center;margin-top:12px;font-size:14px;color:var(--muted)"></div>
   `;
 
-  document.getElementById('fsOptions').innerHTML = `
-    <div class="progress-bar">
-      <div class="progress-fill" style="width:${percent}%"></div>
-    </div>
-  `;
+  document.getElementById('fsOptions').innerHTML = '';
 
   document.querySelectorAll('.fsFooter').forEach(el => el.style.display = 'none');
 // Hide question navigation after submission
@@ -4604,16 +4961,7 @@ if (qNavBtn) qNavBtn.style.display = 'none';
   // ADD BUTTON
   const msgEl = document.getElementById("redirectMsg");
   msgEl.innerHTML = `
-    <button id="goLoginBtn"
-      style="
-        margin-top:15px;
-        padding:10px 22px;
-        font-size:16px;
-        font-weight:bold;
-        border-radius:10px;
-        background:#34d399;
-        color:#042033;
-        cursor:pointer;">
+    <button id="goLoginBtn" class="result-primary-action">
       Go to Login
     </button>
   `;
