@@ -655,26 +655,35 @@
   "results": [],
   "settings": {
     "durationMin": 30,
-    "resumeEnabled": false,
-    "maxResumes": 2,
+    "customMsg": "📢 Welcome to your exam! Stay calm, focus, and do your best!",
+    "shuffle": true,
+    "allowAfterTime": false,
     "showPublicImportBackup": true,
     "showQuestionAnswerKey": false,
     "showSubmitAnswerReview": false,
-    "offlineProctoringEnabled": false,
-    "proctoringRequireCamera": false,
+    "offlineProctoringEnabled": true,
+    "proctoringRequireCamera": true,
     "proctoringSnapshotsEnabled": true,
-    "proctoringFaceDetection": false,
-    "proctoringRequireSingleFace": false,
+    "proctoringFaceDetection": true,
+    "proctoringRequireSingleFace": true,
+    "proctoringSnapshotIntervalSec": 60,
+    "proctoringMaxSnapshots": 10,
     "proctoringTabWarnings": true,
     "proctoringFullscreenWarnings": true,
     "admitCardEnabled": true,
     "admitCardPasswordMode": "masked",
     "admitCardExamDate": "",
     "admitCardInstructions": "Bring this admit card and follow all exam instructions. Do not refresh, switch tabs, or leave fullscreen during the exam.",
-    "proctoringSnapshotIntervalSec": 60,
-    "proctoringMaxSnapshots": 10,
+    "logo": "",
+    "author": "",
+    "college": "",
+    "subject": "",
+    "subjectCode": "",
+    "fullMarks": 30,
+    "resumeEnabled": false,
+    "maxResumes": 2,
     "counts": {
-      "Synopsis": 0,
+      "Synopsis": 30,
       "Minor Practical": 0,
       "Major Practical": 0,
       "Viva": 0
@@ -682,6 +691,7 @@
   },
   "adminCred": {
     "username": "admin",
-    "password": "exam123"
+    "password": "admin2026",
+    "updatedAt": "2026-08-10T16:11:25.322Z"
   }
 }
