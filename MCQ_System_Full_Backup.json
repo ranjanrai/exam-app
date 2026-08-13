@@ -657,7 +657,7 @@
     "durationMin": 30,
     "customMsg": "📢 Welcome to your exam! Stay calm, focus, and do your best!",
     "shuffle": true,
-    "allowAfterTime": false,
+    "allowAfterTime": true,
     "showPublicImportBackup": true,
     "showQuestionAnswerKey": false,
     "showSubmitAnswerReview": false,
@@ -670,28 +670,29 @@
     "proctoringMaxSnapshots": 10,
     "proctoringTabWarnings": true,
     "proctoringFullscreenWarnings": true,
-    "admitCardEnabled": true,
+    "admitCardEnabled": false,
     "admitCardPasswordMode": "masked",
     "admitCardExamDate": "",
     "admitCardInstructions": "Bring this admit card and follow all exam instructions. Do not refresh, switch tabs, or leave fullscreen during the exam.",
     "logo": "",
-    "author": "",
-    "college": "",
-    "subject": "",
+    "author": "Ranjan Ray",
+    "college": "Regional College of Pharmaceutical Sciences",
+    "subject": "Computer Applications in Pharmacy",
     "subjectCode": "",
     "fullMarks": 30,
-    "resumeEnabled": false,
+    "resumeEnabled": true,
     "maxResumes": 2,
     "counts": {
       "Synopsis": 30,
       "Minor Practical": 0,
       "Major Practical": 0,
       "Viva": 0
-    }
+    },
+    "showSubmitScore": true,
+    "optionWiseMarks": false
   },
   "adminCred": {
     "username": "admin",
-    "password": "admin2026",
-    "updatedAt": "2026-08-10T16:11:25.322Z"
+    "password": "exam123"
   }
 }
